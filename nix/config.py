@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .i18n import DEFAULT_LANGUAGE, LANGUAGES
+
 VALID_MODES = ("local", "safe", "git")
 
 
@@ -11,6 +13,7 @@ VALID_MODES = ("local", "safe", "git")
 class Config:
     theme: str = "green"
     mode: str = "local"
+    language: str = DEFAULT_LANGUAGE
     attempts: int = 0
     max_attempts: int = 100
     mutation_budget: int = 10
@@ -26,11 +29,17 @@ class Config:
     def __post_init__(self) -> None:
         if self.mode not in VALID_MODES:
             self.mode = "local"
+        if self.language not in LANGUAGES:
+            self.language = DEFAULT_LANGUAGE
         if self.protected_paths is None:
             self.protected_paths = ["pyproject.toml", "setup.cfg", "Cargo.toml",
                                      "package.json", ".env"]
         self.attempts = max(0, min(self.attempts, self.max_attempts))
         self.mutation_budget = max(0, self.mutation_budget)
+
+    def t(self, key: str, **kwargs) -> str:
+        from .i18n import t as translate
+        return translate(self.language, key, **kwargs)
 
 
 class ConfigStore:

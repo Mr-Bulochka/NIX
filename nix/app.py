@@ -8,10 +8,11 @@ from .journal import Journal
 from .logger import SessionLogger
 from .pet import Pet
 from .state import State
-from .ui import NixUI
 
 
 class NixApp:
+    version = __version__
+
     def __init__(self) -> None:
         self.root = Path.cwd().resolve()
         self.state = State(self.root)
@@ -26,74 +27,51 @@ class NixApp:
         self.pet_store = Pet(self.state.nix)
         self.pet = self.pet_store.load()
 
-        self.ui = NixUI()
-
     def run(self) -> None:
+        from .ui import NixUI
+        self.ui = NixUI(self)
+        self.ui.run()
+
+    def t(self, key: str, **kwargs) -> str:
+        return self.config.t(key, **kwargs)
+
+    def handle_command(self, raw: str) -> bool:
+        raw = raw.strip()
+        if not raw:
+            return True
+
+        self.session_logger.write("COMMAND", raw)
+
+        if not raw.startswith("/"):
+            self.ui.show_message("SYSTEM", self.t("fb.not_command"))
+            return True
+
+        parts = raw[1:].split()
+        if not parts:
+            return True
+
+        name = parts[0].lower()
+        args = parts[1:]
+
+        if name in ("quit", "exit"):
+            self.session_logger.write("SYSTEM", "session ended by user")
+            self.journal.write("SYSTEM", "session ended by user")
+            return False
+
         from .commands import get_command
 
-        if self.pet is None:
-            name = self.ui.show_first_launch()
-            self.pet = self.pet_store.create(name)
-            self.journal.write("SYSTEM", f"pet created: {name}")
-            self.session_logger.write("SYSTEM", f"pet created: {name}")
+        cmd = get_command(name)
+        if cmd is None:
+            self.ui.show_message("ERROR", self.t("fb.unknown", name=name))
+            return True
 
-        self.session_logger.write("SYSTEM",
-                                   f"session started root={self.root}")
-        self.journal.write("SYSTEM", f"session started root={self.root}")
-
-        self._draw()
-
-        while True:
-            try:
-                raw = self.ui.get_input()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                break
-
-            if not raw:
-                continue
-
-            if not raw.startswith("/"):
-                self.ui.show_message("SYSTEM",
-                                      "Commands must start with '/'. Type /help.")
-                continue
-
-            parts = raw[1:].split()
-            if not parts:
-                continue
-
-            cmd_name = parts[0].lower()
-            args = parts[1:]
-
-            if cmd_name in ("quit", "exit"):
-                self.journal.write("SYSTEM", "session ended by user")
-                self.session_logger.write("SYSTEM", "session ended by user")
-                break
-
-            cmd = get_command(cmd_name)
-            if cmd is None:
-                self.ui.show_message("ERROR",
-                                      f"Unknown command: /{cmd_name}. Type /help.")
-                continue
-
+        try:
             result = cmd.handler(self, args)
+        except Exception as exc:
+            self.ui.show_message("ERROR", self.t("fb.failed", name=name, exc=exc))
+            self.session_logger.write("ERROR", f"/{name} failed: {exc}")
+            return True
 
-            self.session_logger.write("COMMAND", raw)
-
-            if result.clear_screen:
-                self._draw()
-            elif result.message:
-                self.ui.show_message("SYSTEM", result.message)
-
-            if not result.continue_session:
-                break
-
-    def _draw(self) -> None:
-        project_name = self.root.name or str(self.root)
-        events = self.session_logger.read_last(15)
-        self.ui.draw_full(
-            project_name=project_name,
-            pet=self.pet,
-            config=self.config,
-            events=events,
-        )
+        if result.message:
+            self.ui.show_message("SYSTEM", result.message)
+        return result.continue_session

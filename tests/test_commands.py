@@ -16,6 +16,7 @@ class TestCommands(unittest.TestCase):
         self.assertIn("clear", COMMANDS)
         self.assertIn("quit", COMMANDS)
         self.assertIn("version", COMMANDS)
+        self.assertIn("pwd", COMMANDS)
 
     def test_get_command(self):
         self.assertIsNotNone(get_command("help"))

@@ -1,455 +1,610 @@
 from __future__ import annotations
 
-import os
-import sys
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.columns import Columns
-from rich.align import Align
-from rich import box
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.styles import Style
-from prompt_toolkit.formatted_text import HTML
+from .i18n import t as _t
 
 if TYPE_CHECKING:
+    from .app import NixApp
     from .config import Config
     from .scanner import ProjectInfo
 
-VERSION = "0.2.0"
+BG = "#1a1b26"
+SURFACE = "#16161e"
+FG = "#c0caf5"
+BLUE = "#7aa2f7"
+CYAN = "#7dcfff"
+PURPLE = "#bb9af7"
+GREEN = "#9ece6a"
+RED = "#f7768e"
+YELLOW = "#e0af68"
+DIM = "#565f89"
+ORANGE = "#ff9e64"
 
-ACCENT = "bold green"
-ACCENT_DIM = "dim green"
-HEADER_STYLE = "bold green"
-PET_STYLE = "bold cyan"
-ERROR_STYLE = "bold red"
-WARN_STYLE = "bold yellow"
-INFO_STYLE = "bold white"
-DIM_STYLE = "dim white"
+SPINNER = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
 
 PET_FRAMES = {
     "seed": (
-        "  ╭──────╮\n"
-        "  │ .  . │\n"
-        "  │  ▪   │\n"
-        "  ╰──────╯\n"
-        "    │  │"
+        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
+        "   \u2502  .  .  \u2502\n"
+        "   \u2502   \u25aa    \u2502\n"
+        "   \u2570\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256f\n"
+        "      \u2502  \u2502"
     ),
     "sprout": (
-        "  ╭──────╮\n"
-        "  │ ◉  ◉ │\n"
-        "  │  ▣   │\n"
-        "  ╰──┬┬──╯\n"
-        "     ││\n"
-        "    ╱  ╲"
+        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
+        "   \u2502  \u25c9  \u25c9  \u2502\n"
+        "   \u2502   \u25a3    \u2502\n"
+        "   \u2570\u2550\u2550\u2550\u252c\u252c\u2550\u2550\u2550\u256f\n"
+        "       \u2502\u2502\n"
+        "      \u2571  \u2572"
     ),
     "bloom": (
-        "  ╭──────╮\n"
-        "  │ ◉‿◉ │\n"
-        "  │  ◆   │\n"
-        "  ╰──┬┬──╯\n"
-        "   ╱╱││╲╲\n"
-        "  ╱  ╲╱  ╲"
+        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
+        "   \u2502 \u25c9  \u25c9  \u2502\n"
+        "   \u2502   \u25c6    \u2502\n"
+        "   \u2570\u2550\u2550\u2550\u252c\u252c\u2550\u2550\u2550\u256f\n"
+        "     \u2571\u2571\u2502\u2502\u2572\u2572\n"
+        "    \u2571   \u2572   \u2572"
     ),
 }
 
-MOOD_LABELS = {
-    "curious": ("curious", "bold yellow"),
-    "happy": ("happy", "bold green"),
-    "content": ("content", "green"),
-    "focused": ("focused", "bold cyan"),
-    "alert": ("alert", "bold yellow"),
-    "determined": ("determined", "bold magenta"),
-    "thoughtful": ("thoughtful", "cyan"),
-    "cautious": ("cautious", "yellow"),
-    "worried": ("worried", "bold red"),
-    "relieved": ("relieved", "green"),
-    "tired": ("tired", "dim"),
-    "anxious": ("anxious", "red"),
+MOOD_STYLES = {
+    "curious": YELLOW,
+    "happy": GREEN,
+    "content": GREEN,
+    "focused": BLUE,
+    "alert": YELLOW,
+    "determined": PURPLE,
+    "thoughtful": CYAN,
+    "cautious": YELLOW,
+    "worried": RED,
+    "relieved": GREEN,
+    "tired": DIM,
+    "anxious": RED,
 }
+
+KIND_COLORS = {
+    "SYSTEM": BLUE,
+    "SCAN": CYAN,
+    "PET": PURPLE,
+    "ERROR": RED,
+    "WARN": YELLOW,
+    "MUTATION": ORANGE,
+    "TEST": YELLOW,
+    "LEARN": GREEN,
+    "CHECKPOINT": BLUE,
+}
+
+APP_CSS = f"""
+Screen {{
+    align: center middle;
+    background: {BG};
+}}
+
+#app {{
+    width: 100%;
+    max-width: 120;
+    height: 100%;
+    border: round {DIM};
+    background: {BG};
+}}
+
+#pet-box {{
+    height: auto;
+    max-height: 12;
+    margin: 1 2 0 2;
+}}
+
+#actions {{
+    height: auto;
+    padding: 1 2 0 2;
+    align: center middle;
+}}
+
+#actions Button {{
+    margin: 0 1;
+}}
+
+#log {{
+    margin: 1 2 0 2;
+    padding: 0 1;
+    background: {SURFACE};
+    border: round {DIM};
+}}
+
+#cmd {{
+    dock: bottom;
+    height: 3;
+    margin: 0 2 1 2;
+    padding: 0 1;
+    border: round {BLUE};
+    background: {BG};
+    color: {FG};
+}}
+
+#cmd:focus {{
+    border: round {CYAN};
+}}
+
+Footer {{
+    background: {SURFACE};
+    color: {FG};
+}}
+
+Header {{
+    background: {SURFACE};
+    color: {FG};
+}}
+
+#btn-scan {{ background: {CYAN}; color: #16161e; }}
+#btn-status {{ background: {BLUE}; color: #16161e; }}
+#btn-pet {{ background: {PURPLE}; color: #16161e; }}
+#btn-settings {{ background: {GREEN}; color: #16161e; }}
+#btn-help {{ background: {YELLOW}; color: #16161e; }}
+#btn-clear {{ background: {ORANGE}; color: #16161e; }}
+#btn-quit {{ background: {RED}; color: #16161e; }}
+"""
 
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%H:%M:%S")
 
 
-def _make_prompt_style() -> Style:
-    return Style.from_dict({
-        "prompt": "bold green",
-        "input": "",
-    })
+class FirstLaunchScreen(ModalScreen[dict]):
+    CSS = f"""
+    #first-launch {{
+        width: 66;
+        height: auto;
+        max-height: 20;
+        padding: 2 3;
+        align: center middle;
+        border: round {PURPLE};
+        background: {SURFACE};
+    }}
 
+    #first-launch .title {{
+        content-align: center middle;
+        text-style: bold;
+        color: {GREEN};
+        text-align: center;
+    }}
 
-class NixUI:
-    def __init__(self) -> None:
-        self.console = Console(
-            file=sys.stdout,
-            force_terminal=True,
-            color_system="truecolor",
-            no_color=False,
+    #first-launch .hint {{
+        content-align: center middle;
+        color: {DIM};
+        text-align: center;
+    }}
+
+    #fl-select {{
+        margin: 1 0;
+        border: round {PURPLE};
+        background: {BG};
+        color: {FG};
+    }}
+
+    #pet-name {{
+        margin: 1 0;
+        border: round {BLUE};
+        background: {BG};
+        color: {FG};
+    }}
+
+    #ok-btn {{
+        margin: 1 0;
+    }}
+    """
+
+    def __init__(self, initial_lang: str = "en") -> None:
+        super().__init__()
+        self._lang = initial_lang
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="first-launch"):
+            yield Label("", id="fl-title", classes="title")
+            yield Label("", id="fl-hint1", classes="hint")
+            yield Label("", id="fl-hint2", classes="hint")
+            yield Label("", id="fl-lang-label", classes="hint")
+            yield Select(
+                [("English", "en"), ("Русский", "ru")],
+                value=self._lang,
+                allow_blank=False,
+                id="fl-select",
+            )
+            yield Label("", id="fl-name-label", classes="hint")
+            yield Input(placeholder="", id="pet-name")
+            yield Button("", id="ok-btn", variant="primary")
+
+    def on_mount(self) -> None:
+        self._apply_lang()
+        self.query_one("#pet-name", Input).focus()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        self._lang = event.value
+        self._apply_lang()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._submit(event.value)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "ok-btn":
+            self._submit(self.query_one("#pet-name", Input).value)
+
+    def _apply_lang(self) -> None:
+        self.query_one("#fl-title", Label).update(_t(self._lang, "fl.title"))
+        self.query_one("#fl-hint1", Label).update(_t(self._lang, "fl.hint1"))
+        self.query_one("#fl-hint2", Label).update(_t(self._lang, "fl.hint2"))
+        self.query_one("#fl-lang-label", Label).update(_t(self._lang, "fl.language"))
+        self.query_one("#fl-name-label", Label).update(_t(self._lang, "fl.choose_name"))
+        self.query_one("#pet-name", Input).placeholder = _t(
+            self._lang, "fl.name_placeholder"
         )
-        self.session = PromptSession(
-            history=InMemoryHistory(),
-            style=_make_prompt_style(),
-            complete_while_typing=False,
-            enable_open_in_editor=False,
-            enable_history_search=True,
+        self.query_one("#ok-btn", Button).label = _t(self._lang, "fl.create")
+
+    def _submit(self, raw: str) -> None:
+        name = raw.strip()
+        if not name:
+            self.notify(_t(self._lang, "fl.empty_name"), severity="error")
+            return
+        self.dismiss({"name": name, "language": self._lang})
+
+
+class NixUI(App):
+    BINDINGS = [
+        Binding("ctrl+q", "quit", ""),
+        Binding("ctrl+l", "clear_log", ""),
+        Binding("ctrl+s", "run_scan", ""),
+        Binding("ctrl+p", "run_pet", ""),
+    ]
+
+    CSS = APP_CSS
+
+    def __init__(self, nix: "NixApp") -> None:
+        super().__init__()
+        self.nix = nix
+        self._spin = 0
+
+    # ----- lifecycle -------------------------------------------------
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="app"):
+            yield Header(show_clock=True)
+            yield Static("", id="pet-box")
+            with Horizontal(id="actions"):
+                yield Button("", id="btn-scan")
+                yield Button("", id="btn-status")
+                yield Button("", id="btn-pet")
+                yield Button("", id="btn-settings")
+                yield Button("", id="btn-help")
+                yield Button("", id="btn-clear")
+                yield Button("", id="btn-quit")
+            yield RichLog(id="log", wrap=True, markup=True, highlight=True,
+                          auto_scroll=True)
+            yield Input(id="cmd", placeholder="")
+            yield Footer()
+
+    def on_mount(self) -> None:
+        self._apply_language()
+        if self.nix.pet is None:
+            self.push_screen(
+                FirstLaunchScreen(self.nix.config.language),
+                callback=self._on_pet_ready,
+            )
+        else:
+            self._refresh_pet()
+            self._write_session_start()
+            self.query_one("#cmd", Input).focus()
+        self.set_interval(1.0, self._tick)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        raw = event.value.strip()
+        if not raw:
+            return
+        if not self.nix.handle_command(raw):
+            self.exit(0)
+        self._refresh_header()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        mapping = {
+            "btn-scan": "/scan",
+            "btn-status": "/status",
+            "btn-pet": "/pet",
+            "btn-settings": "/settings",
+            "btn-help": "/help",
+            "btn-clear": "/clear",
+            "btn-quit": "/quit",
+        }
+        action = mapping.get(event.button.id)
+        if not action:
+            return
+        if not self.nix.handle_command(action):
+            self.exit(0)
+        self._refresh_header()
+
+    # ----- actions ---------------------------------------------------
+
+    def action_quit(self) -> None:
+        self.exit(0)
+
+    def action_clear_log(self) -> None:
+        self._log().clear()
+
+    def action_run_scan(self) -> None:
+        self.nix.handle_command("/scan")
+        self._refresh_header()
+
+    def action_run_pet(self) -> None:
+        self.nix.handle_command("/pet")
+
+    # ----- internal --------------------------------------------------
+
+    def _log(self) -> RichLog:
+        return self.query_one("#log", RichLog)
+
+    def _t(self, key: str, **kw) -> str:
+        return self.nix.config.t(key, **kw)
+
+    def _apply_language(self) -> None:
+        cfg = self.nix.config
+        self.query_one("#btn-scan", Button).label = self._t("btn.scan")
+        self.query_one("#btn-status", Button).label = self._t("btn.status")
+        self.query_one("#btn-pet", Button).label = self._t("btn.pet")
+        self.query_one("#btn-settings", Button).label = self._t("btn.settings")
+        self.query_one("#btn-help", Button).label = self._t("btn.help")
+        self.query_one("#btn-clear", Button).label = self._t("btn.clear")
+        self.query_one("#btn-quit", Button).label = self._t("btn.quit")
+        self.query_one("#cmd", Input).placeholder = self._t("cmd.placeholder")
+        self._refresh_header()
+
+    def _refresh_header(self) -> None:
+        cfg = self.nix.config
+        name = self.nix.root.name or str(self.nix.root)
+        mode = cfg.t(f"cmd.mode.{cfg.mode}")
+        self.title = "NIX"
+        self.sub_title = f"{name}  ·  {mode.upper()}  ·  v{self.nix.version}"
+
+    def _write_session_start(self) -> None:
+        l = self._t
+        self._log().write(
+            Text()
+            .append(f"{_timestamp()} ", style=DIM)
+            .append("SYSTEM ", style=BLUE)
+            .append(l("session.started", root=self.nix.root), style=FG)
         )
-        self._events: list[str] = []
-
-    def clear_screen(self) -> None:
-        os.system("cls" if os.name == "nt" else "clear")
-
-    def _banner(self) -> Panel:
-        banner_text = Text()
-        banner_text.append(
-            " ███╗   ██╗██╗██╗  ██╗\n"
-            " ████╗  ██║██║╚██╗██╔╝\n"
-            " ██╔██╗ ██║██║ ╚███╔╝ \n"
-            " ██║╚██╗██║██║ ██╔██╗ \n"
-            " ██║ ╚████║██║██╔╝ ██╗\n"
-            " ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝\n",
-            style=HEADER_STYLE,
+        self._log().write(
+            Text()
+            .append(f"{_timestamp()} ", style=DIM)
+            .append("SYSTEM ", style=BLUE)
+            .append(l("session.foundation"), style=FG)
         )
-        return Panel(
-            Align.center(banner_text),
-            box=box.DOUBLE,
-            style=HEADER_STYLE,
-            padding=(0, 1),
+        self._log().write(
+            Text()
+            .append(f"{_timestamp()} ", style=DIM)
+            .append("SYSTEM ", style=BLUE)
+            .append(l("session.hint"), style=FG)
         )
 
-    def _header_bar(self, project_name: str, mode: str) -> Table:
-        table = Table(
-            box=None, show_header=False, show_edge=False,
-            padding=(0, 1), expand=True,
-        )
-        table.add_column(ratio=3)
-        table.add_column(ratio=1, justify="right")
+    def _on_pet_ready(self, result: dict) -> None:
+        self.nix.config.language = result["language"]
+        self.nix.config_store.save(self.nix.config)
+        self._apply_language()
+        self.nix.pet = self.nix.pet_store.create(result["name"])
+        lang = self.nix.config.language
+        self.nix.journal.write("SYSTEM", f"pet created: {result['name']}")
+        self.nix.session_logger.write("SYSTEM", f"pet created: {result['name']}")
+        self.notify(_t(lang, "welcome_back", name=result["name"]),
+                    severity="information")
+        self._write_session_start()
+        self._refresh_pet()
+        self.query_one("#cmd", Input).focus()
 
-        left = Text()
-        left.append("NIX", style="bold green")
-        left.append("  ·  ", style="dim")
-        left.append("LOCAL PROJECT AGENT", style="dim green")
+    def _tick(self) -> None:
+        self._spin = (self._spin + 1) % len(SPINNER)
+        self._refresh_pet(animate=True)
 
-        right = Text()
-        right.append(project_name, style="bold white")
-        right.append("   ", style="dim")
-        right.append(mode.upper(), style="bold green")
-
-        table.add_row(left, right)
-        return table
-
-    def _pet_panel(self, pet: dict, config: Config) -> Panel | None:
-        if not config.tamagotchi_enabled or not config.avatar_enabled:
-            return None
+    def _refresh_pet(self, animate: bool = False) -> None:
+        pet = self.nix.pet or {}
+        box = self.query_one("#pet-box", Static)
+        if not pet:
+            box.update(Text(self._t("pet.no_pet"), style=DIM))
+            return
 
         pattern = pet.get("body_pattern", "seed")
         art = PET_FRAMES.get(pattern, PET_FRAMES["seed"])
-
-        mood_str = pet.get("mood", "curious")
-        mood_label, mood_style = MOOD_LABELS.get(mood_str, (mood_str, "white"))
+        mood = pet.get("mood", "curious")
+        mood_style = MOOD_STYLES.get(mood, FG)
+        mood_label = self._t(f"mood.{mood}")
         energy = pet.get("energy", 100)
-        name = pet.get("name", "???")
         age = pet.get("age", 0)
-
-        pet_info = Text()
-        pet_info.append(f"{name}", style="bold cyan")
-        pet_info.append(f"  ·  {mood_label}", style=mood_style)
-        pet_info.append(f"  ·  energy {energy}", style="dim")
-        pet_info.append(f"  ·  age {age}", style="dim")
+        name = pet.get("name", "???")
+        spinner = SPINNER[self._spin] if animate else "\u25cf"
 
         body = Text()
-        for line in art.split("\n"):
-            body.append(line + "\n", style=PET_STYLE)
+        for i, line in enumerate(art.split("\n")):
+            body.append(line + "  ", style=CYAN)
+            if i == 0:
+                body.append(spinner, style=YELLOW)
+            body.append("\n")
 
-        layout = Table(box=None, show_header=False, show_edge=False, padding=(0, 2))
-        layout.add_column(ratio=1)
-        layout.add_column(ratio=2)
-        layout.add_row(Align.center(body), pet_info)
-
-        return Panel(
-            layout,
-            title="[bold cyan]Pet[/]",
-            box=box.ROUNDED,
-            style="cyan",
-            padding=(0, 1),
+        panel = Panel(
+            body,
+            title=f"[bold {PURPLE}]{name}[/]",
+            subtitle=f"{mood_label}  ·  {energy}%  ·  {self._t('pet.age')} {age}",
+            border_style=PURPLE,
         )
+        box.update(panel)
 
-    def draw_full(self, project_name: str, pet: dict, config: Config,
-                   events: list[str] | None = None) -> None:
-        self.clear_screen()
-
-        self.console.print(self._banner())
-        self.console.print()
-        self.console.print(self._header_bar(project_name, config.mode))
-        self.console.print()
-
-        pet_panel = self._pet_panel(pet, config)
-        if pet_panel:
-            self.console.print(pet_panel)
-            self.console.print()
-
-        if events:
-            log_table = Table(
-                box=None, show_header=False, show_edge=False,
-                padding=(0, 1), expand=True,
-            )
-            log_table.add_column(style="dim white", width=12)
-            log_table.add_column(style="bold white", width=12)
-            log_table.add_column()
-            for ev in events[-15:]:
-                parts = ev.split(" ", 2) if ev.startswith("[") else ["", "", ev]
-                log_table.add_row(*parts)
-            self.console.print(Panel(
-                log_table,
-                title="[dim]Events[/]",
-                box=box.ROUNDED,
-                style="dim",
-                padding=(0, 1),
-            ))
-            self.console.print()
-
-        self.console.print(
-            Panel(
-                Text("  Type /help for commands.", style="dim green"),
-                box=box.ROUNDED,
-                style=ACCENT_DIM,
-                padding=(0, 1),
-            )
-        )
-        self.console.print()
-
-    def get_input(self) -> str:
-        try:
-            return self.session.prompt(HTML("<prompt>nix&gt; </prompt>")).strip()
-        except (KeyboardInterrupt, EOFError):
-            return "/quit"
+    # ----- public API (used by commands) -----------------------------
 
     def show_message(self, kind: str, text: str) -> None:
-        style_map = {
-            "SYSTEM": INFO_STYLE,
-            "SCAN": "bold cyan",
-            "PET": PET_STYLE,
-            "ERROR": ERROR_STYLE,
-            "WARN": WARN_STYLE,
-            "MUTATION": "bold magenta",
-            "TEST": "bold yellow",
-            "LEARN": "bold green",
-            "CHECKPOINT": "bold blue",
-        }
-        style = style_map.get(kind.upper(), INFO_STYLE)
-        stamp = _timestamp()
-
-        line = Text()
-        line.append(f"[{stamp}] ", style="dim")
-        line.append(f"[{kind.upper():>10}] ", style=style)
-        line.append(text, style="white" if kind.upper() != "ERROR" else ERROR_STYLE)
-
-        self.console.print(line)
-        self._events.append(f"[{stamp}] [{kind.upper():>10}] {text}")
+        color = KIND_COLORS.get(kind.upper(), FG)
+        self._log().write(
+            Text()
+            .append(f"{_timestamp()} ", style=DIM)
+            .append(f"{kind.upper():>10} ", style=color)
+            .append(text, style=FG)
+        )
 
     def show_help(self, lines: list[str]) -> None:
         table = Table(
-            title="Commands",
-            box=box.ROUNDED,
-            style=ACCENT,
-            show_header=False,
-            padding=(0, 2),
+            title=self._t("tbl.commands"),
+            box=None,
+            header_style=f"bold {CYAN}",
+            expand=True,
         )
-        table.add_column(style="bold green", min_width=28)
-        table.add_column(style="white")
+        table.add_column(self._t("tbl.command"), style=GREEN, no_wrap=True)
+        table.add_column(self._t("tbl.description"), style=FG)
         for line in lines:
             parts = line.strip().split(None, 1)
             if len(parts) == 2:
                 table.add_row(parts[0], parts[1])
             else:
                 table.add_row(line, "")
-        self.console.print(table)
+        self._log().write(table)
 
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
                     functions: int, classes: int,
                     source_files: int, total_lines: int) -> None:
+        t = self._t
         table = Table(
-            title="Project Status",
-            box=box.ROUNDED,
-            style=ACCENT,
+            title=t("tbl.project_status"),
+            header_style=f"bold {BLUE}",
+            border_style=DIM,
             expand=True,
         )
-        table.add_column("Key", style="bold green", ratio=1)
-        table.add_column("Value", style="white", ratio=2)
-
-        table.add_row("Root", root)
-        table.add_row("Mode", mode.upper())
-        table.add_row("Attempts", f"{attempts} / {max_attempts}")
-        table.add_row("Files", str(files))
-        table.add_row("Directories", str(dirs))
-        table.add_row("Source Files", str(source_files))
-        table.add_row("Functions", str(functions))
-        table.add_row("Classes", str(classes))
-        table.add_row("Total Lines", f"{total_lines:,}")
-
-        self.console.print(table)
+        table.add_column(t("tbl.key"), style=GREEN)
+        table.add_column(t("tbl.value"), style=FG)
+        table.add_row(t("st.root"), root)
+        table.add_row(t("st.mode"), f"[{BLUE}]{mode.upper()}[/]")
+        table.add_row(t("st.attempts"), str(attempts))
+        table.add_row(t("st.files"), str(files))
+        table.add_row(t("st.dirs"), str(dirs))
+        table.add_row(t("st.source"), str(source_files))
+        table.add_row(t("st.functions"), str(functions))
+        table.add_row(t("st.classes"), str(classes))
+        table.add_row(t("st.lines"), f"{total_lines:,}")
+        self._log().write(table)
 
     def show_scan(self, info: "ProjectInfo") -> None:
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[bold cyan]{info.files}[/] files  ·  "
-                f"[bold cyan]{info.directories}[/] directories  ·  "
-                f"[bold cyan]{info.source_files}[/] source  ·  "
-                f"[bold cyan]{info.functions}[/] functions  ·  "
-                f"[bold cyan]{info.classes}[/] classes  ·  "
-                f"[bold cyan]{info.total_lines:,}[/] lines",
-                title="[bold cyan]Scan Results[/]",
-                box=box.ROUNDED,
-                style="cyan",
-                padding=(0, 2),
-            )
-        )
+        t = self._t
+        header = Text()
+        header.append(f"{info.files} {t('scan.files')}  ", style=CYAN)
+        header.append(f"{info.directories} {t('scan.dirs')}  ", style=CYAN)
+        header.append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
+        header.append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
+        header.append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
+        self._log().write(header)
 
         if info.extensions:
-            ext_table = Table(
-                box=None, show_header=True, show_edge=False,
-                padding=(0, 2),
+            table = Table(
+                title=t("tbl.extensions"),
+                header_style=f"bold {PURPLE}",
+                border_style=DIM,
+                expand=True,
             )
-            ext_table.add_column("Extension", style="bold white")
-            ext_table.add_column("Count", justify="right", style="bold green")
+            table.add_column(t("tbl.extension"), style=FG)
+            table.add_column(t("tbl.count"), justify="right", style=GREEN)
             for ext, count in info.top_extensions:
-                ext_table.add_row(ext, str(count))
-            self.console.print(ext_table)
-        self.console.print()
+                table.add_row(ext, str(count))
+            self._log().write(table)
 
     def show_pet(self, pet: dict) -> None:
-        mood_str = pet.get("mood", "curious")
-        mood_label, mood_style = MOOD_LABELS.get(mood_str, (mood_str, "white"))
-
+        mood = pet.get("mood", "curious")
+        mood_style = MOOD_STYLES.get(mood, FG)
+        mood_label = self._t(f"mood.{mood}")
         table = Table(
-            title=f"Pet: {pet.get('name', '???')}",
-            box=box.ROUNDED,
-            style=PET_STYLE,
+            title=self._t("tbl.pet", name=pet.get("name", "???")),
+            header_style=f"bold {PURPLE}",
+            border_style=DIM,
+            expand=True,
         )
-        table.add_column("Attribute", style="bold cyan")
-        table.add_column("Value", style="white")
-
-        table.add_row("Name", pet.get("name", "???"))
-        table.add_row("Mood", Text(mood_label, style=mood_style))
-        table.add_row("Energy", str(pet.get("energy", 100)))
-        table.add_row("Age", str(pet.get("age", 0)))
-        table.add_row("Body", pet.get("body_pattern", "seed"))
-        table.add_row("Stage", str(pet.get("stage", 1)))
-        table.add_row("Evolution", str(pet.get("evolution_level", 0)))
-        table.add_row("Mutations witnessed", str(pet.get("mutations_witnessed", 0)))
-        table.add_row("Failures survived", str(pet.get("failures_survived", 0)))
-
-        self.console.print(table)
+        table.add_column(self._t("tbl.attribute"), style=CYAN)
+        table.add_column(self._t("tbl.value"), style=FG)
+        table.add_row(self._t("pet.name"), str(pet.get("name", "???")))
+        table.add_row(self._t("pet.mood"), f"[{mood_style}]{mood_label}[/]")
+        table.add_row(self._t("pet.energy"), str(pet.get("energy", 100)))
+        table.add_row(self._t("pet.age"), str(pet.get("age", 0)))
+        table.add_row(self._t("pet.body"), pet.get("body_pattern", "seed"))
+        table.add_row(self._t("pet.stage"), str(pet.get("stage", 1)))
+        table.add_row(self._t("pet.mutations"),
+                      str(pet.get("mutations_witnessed", 0)))
+        table.add_row(self._t("pet.failures"),
+                      str(pet.get("failures_survived", 0)))
+        self._log().write(table)
 
     def show_settings(self, config: "Config") -> None:
+        t = self._t
+        on, off = t("on"), t("off")
         table = Table(
-            title="Settings",
-            box=box.ROUNDED,
-            style=ACCENT,
+            title=t("tbl.settings"),
+            header_style=f"bold {GREEN}",
+            border_style=DIM,
+            expand=True,
         )
-        table.add_column("Setting", style="bold green")
-        table.add_column("Value", style="white")
-
-        table.add_row("Theme", config.theme)
-        table.add_row("Mode", config.mode)
-        table.add_row("Attempts", f"{config.attempts}/{config.max_attempts}")
-        table.add_row("Mutation budget", str(config.mutation_budget))
-        table.add_row("Tamagotchi", "on" if config.tamagotchi_enabled else "off")
-        table.add_row("Animations", "on" if config.animations_enabled else "off")
-        table.add_row("Avatar", "on" if config.avatar_enabled else "off")
-        table.add_row("Sounds", "on" if config.sounds_enabled else "off")
-        table.add_row("Auto scan", "on" if config.auto_scan else "off")
-        table.add_row("Checkpoint on mutate", "on" if config.checkpoint_on_mutate else "off")
-        table.add_row("Git auto commit", "on" if config.git_auto_commit else "off")
-        table.add_row("Protected paths",
-                       ", ".join(config.protected_paths or []))
-
-        self.console.print(table)
+        table.add_column(t("tbl.setting"), style=GREEN)
+        table.add_column(t("tbl.value"), style=FG)
+        table.add_row(t("set.language"), config.language)
+        table.add_row(t("set.theme"), config.theme)
+        table.add_row(t("st.mode"), config.mode)
+        table.add_row(t("set.attempts"),
+                      f"{config.attempts}/{config.max_attempts}")
+        table.add_row(t("set.mutation_budget"), str(config.mutation_budget))
+        table.add_row(t("set.tamagotchi"), on if config.tamagotchi_enabled else off)
+        table.add_row(t("set.animations"), on if config.animations_enabled else off)
+        table.add_row(t("set.avatar"), on if config.avatar_enabled else off)
+        table.add_row(t("set.sounds"), on if config.sounds_enabled else off)
+        table.add_row(t("set.auto_scan"), on if config.auto_scan else off)
+        table.add_row(t("set.checkpoint"),
+                      on if config.checkpoint_on_mutate else off)
+        table.add_row(t("set.git"), on if config.git_auto_commit else off)
+        table.add_row(t("set.protected"),
+                      ", ".join(config.protected_paths or []))
+        self._log().write(table)
 
     def show_logs(self, path: object, lines: list[str]) -> None:
         if not lines:
-            self.console.print(
-                Panel("[dim]No log entries yet.[/]",
-                      title="Session Log", box=box.ROUNDED, style="dim")
-            )
+            self._log().write(Text(self._t("fb.no_logs"), style=DIM))
             return
-
         log_text = Text()
         for line in lines:
-            log_text.append(line + "\n", style="dim")
-
-        self.console.print(
+            log_text.append(line + "\n", style=DIM)
+        self._log().write(
             Panel(log_text,
-                  title=f"[dim]{path}[/]",
-                  box=box.ROUNDED, style="dim")
+                  title=f"{self._t('tbl.session_log')} \u00b7 {path}",
+                  border_style=DIM)
         )
 
     def show_history(self, entries: list[dict]) -> None:
         if not entries:
-            self.console.print(
-                Panel("[dim]No journal entries today.[/]",
-                      title="Journal", box=box.ROUNDED, style="dim")
-            )
+            self._log().write(Text(self._t("fb.no_history"), style=DIM))
             return
-
         table = Table(
-            title="Journal (today)",
-            box=box.ROUNDED,
-            style=ACCENT,
-            show_header=True,
+            title=self._t("tbl.journal"),
+            header_style=f"bold {BLUE}",
+            border_style=DIM,
+            expand=True,
         )
-        table.add_column("Time", style="dim", width=20)
-        table.add_column("Kind", style="bold green", width=10)
-        table.add_column("Message", style="white")
-
+        table.add_column(self._t("tbl.time"), style=DIM)
+        table.add_column(self._t("tbl.kind"), style=GREEN)
+        table.add_column(self._t("tbl.message"), style=FG)
         for entry in entries:
-            ts = entry.get("ts", "")
-            kind = entry.get("kind", "")
-            msg = entry.get("message", "")
-            table.add_row(ts, kind, msg)
-
-        self.console.print(table)
-
-    def show_first_launch(self) -> str:
-        self.console.print()
-        self.console.print(Panel(
-            "[bold green]Welcome to NIX![/]\n\n"
-            "This is your first launch in this directory.\n"
-            "NIX will create a [bold].nix/[/] directory for state.\n"
-            "Stage 1 is [bold]read-only[/]: source files will NOT be mutated.\n",
-            title="[bold green]First Launch[/]",
-            box=box.DOUBLE,
-            style="green",
-            padding=(1, 2),
-        ))
-        self.console.print()
-        while True:
-            name = self.session.prompt(
-                HTML("<prompt>Choose your pet's name: </prompt>")
-            ).strip()
-            if name:
-                return name
-            self.console.print("[red]Name cannot be empty.[/]")
+            table.add_row(entry.get("ts", ""), entry.get("kind", ""),
+                          entry.get("message", ""))
+        self._log().write(table)
 
     def show_error(self, text: str) -> None:
-        self.console.print(f"[{ERROR_STYLE}]Error: {text}[/]")
+        self.show_message("ERROR", text)
 
-    def show_welcome_back(self, pet_name: str, project: str) -> None:
-        self.console.print()
-        self.console.print(Panel(
-            f"[bold green]Welcome back![/]\n"
-            f"Pet: [bold cyan]{pet_name}[/]\n"
-            f"Project: [bold white]{project}[/]",
-            box=box.ROUNDED,
-            style="green",
-            padding=(0, 2),
-        ))
+    def clear_log(self) -> None:
+        self._log().clear()
