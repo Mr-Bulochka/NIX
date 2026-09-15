@@ -8,7 +8,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
 
@@ -19,8 +19,10 @@ if TYPE_CHECKING:
     from .config import Config
     from .scanner import ProjectInfo
 
-BG = "#1a1b26"
+BG = "#11131d"
 SURFACE = "#16161e"
+BLACK = "#05070c"
+PANEL = "#0a0d15"
 FG = "#c0caf5"
 BLUE = "#7aa2f7"
 CYAN = "#7dcfff"
@@ -94,10 +96,17 @@ Screen {{
 
 #app {{
     width: 100%;
-    max-width: 120;
+    max-width: 140;
     height: 100%;
-    border: round {DIM};
+    border: round {BLUE};
     background: {BG};
+}}
+
+#main {{
+    height: 1fr;
+    overflow-y: auto;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: {DIM} {BLACK};
 }}
 
 #pet-box {{
@@ -119,8 +128,8 @@ Screen {{
 #log {{
     margin: 1 2 0 2;
     padding: 0 1;
-    background: {SURFACE};
-    border: round {DIM};
+    background: {PANEL};
+    border: round {BLUE};
 }}
 
 #cmd {{
@@ -129,7 +138,7 @@ Screen {{
     margin: 0 2 1 2;
     padding: 0 1;
     border: round {BLUE};
-    background: {BG};
+    background: {PANEL};
     color: {FG};
 }}
 
@@ -138,22 +147,49 @@ Screen {{
 }}
 
 Footer {{
-    background: {SURFACE};
-    color: {FG};
+    background: {BLACK};
+    color: {CYAN};
+}}
+
+Footer > .footer--key {{
+    color: {BLUE};
 }}
 
 Header {{
-    background: {SURFACE};
+    background: {BLACK};
     color: {FG};
 }}
 
-#btn-scan {{ background: {CYAN}; color: #16161e; }}
-#btn-status {{ background: {BLUE}; color: #16161e; }}
-#btn-pet {{ background: {PURPLE}; color: #16161e; }}
-#btn-settings {{ background: {GREEN}; color: #16161e; }}
-#btn-help {{ background: {YELLOW}; color: #16161e; }}
-#btn-clear {{ background: {ORANGE}; color: #16161e; }}
-#btn-quit {{ background: {RED}; color: #16161e; }}
+Header .header--title {{
+    color: {BLUE};
+}}
+
+Header .header--clock {{
+    color: {CYAN};
+}}
+
+Scrollbar {{
+    background: {BLACK};
+    color: {DIM};
+}}
+
+Scrollbar:hover {{
+    background: {BLACK};
+    color: {BLUE};
+}}
+
+.Selection {{
+    background: {BLUE};
+    color: {BLACK};
+}}
+
+#btn-scan {{ background: {CYAN}; color: #11131d; }}
+#btn-status {{ background: {BLUE}; color: #11131d; }}
+#btn-pet {{ background: {PURPLE}; color: #11131d; }}
+#btn-settings {{ background: {GREEN}; color: #11131d; }}
+#btn-help {{ background: {YELLOW}; color: #11131d; }}
+#btn-clear {{ background: {ORANGE}; color: #11131d; }}
+#btn-quit {{ background: {RED}; color: #11131d; }}
 """
 
 
@@ -164,13 +200,16 @@ def _timestamp() -> str:
 class FirstLaunchScreen(ModalScreen[dict]):
     CSS = f"""
     #first-launch {{
-        width: 66;
+        width: 78;
+        max-width: 100%;
         height: auto;
-        max-height: 20;
-        padding: 2 3;
+        max-height: 95%;
+        padding: 1 2;
         align: center middle;
-        border: round {PURPLE};
-        background: {SURFACE};
+        border: round {BLUE};
+        background: {PANEL};
+        scrollbar-size-vertical: 1;
+        scrollbar-color: {DIM} {BLACK};
     }}
 
     #first-launch .title {{
@@ -178,6 +217,7 @@ class FirstLaunchScreen(ModalScreen[dict]):
         text-style: bold;
         color: {GREEN};
         text-align: center;
+        margin: 0 0 1 0;
     }}
 
     #first-launch .hint {{
@@ -186,22 +226,48 @@ class FirstLaunchScreen(ModalScreen[dict]):
         text-align: center;
     }}
 
+    #first-launch .field {{
+        height: auto;
+        align: center middle;
+    }}
+
+    #first-launch .flabel {{
+        width: 32;
+        height: 3;
+        content-align: left middle;
+        color: {CYAN};
+        margin-right: 1;
+    }}
+
     #fl-select {{
-        margin: 1 0;
-        border: round {PURPLE};
-        background: {BG};
+        border: round {BLUE};
+        background: {BLACK};
         color: {FG};
+    }}
+
+    #fl-select:focus {{
+        border: round {CYAN};
     }}
 
     #pet-name {{
-        margin: 1 0;
+        margin: 0 0 1 0;
         border: round {BLUE};
-        background: {BG};
+        background: {BLACK};
         color: {FG};
     }}
 
+    #pet-name:focus {{
+        border: round {CYAN};
+    }}
+
     #ok-btn {{
-        margin: 1 0;
+        margin: 1 0 0 0;
+        background: {BLUE};
+        color: {BLACK};
+    }}
+
+    #ok-btn:focus {{
+        border: round {CYAN};
     }}
     """
 
@@ -210,19 +276,21 @@ class FirstLaunchScreen(ModalScreen[dict]):
         self._lang = initial_lang
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="first-launch"):
+        with VerticalScroll(id="first-launch"):
             yield Label("", id="fl-title", classes="title")
             yield Label("", id="fl-hint1", classes="hint")
             yield Label("", id="fl-hint2", classes="hint")
-            yield Label("", id="fl-lang-label", classes="hint")
-            yield Select(
-                [("English", "en"), ("Русский", "ru")],
-                value=self._lang,
-                allow_blank=False,
-                id="fl-select",
-            )
-            yield Label("", id="fl-name-label", classes="hint")
-            yield Input(placeholder="", id="pet-name")
+            with Horizontal(classes="field"):
+                yield Label("", id="fl-lang-label", classes="flabel")
+                yield Select(
+                    [("English", "en"), ("Русский", "ru")],
+                    value=self._lang,
+                    allow_blank=False,
+                    id="fl-select",
+                )
+            with Horizontal(classes="field"):
+                yield Label("", id="fl-name-label", classes="flabel")
+                yield Input(placeholder="", id="pet-name")
             yield Button("", id="ok-btn", variant="primary")
 
     def on_mount(self) -> None:
@@ -261,10 +329,12 @@ class FirstLaunchScreen(ModalScreen[dict]):
 
 class NixUI(App):
     BINDINGS = [
-        Binding("ctrl+q", "quit", ""),
-        Binding("ctrl+l", "clear_log", ""),
-        Binding("ctrl+s", "run_scan", ""),
-        Binding("ctrl+p", "run_pet", ""),
+        Binding("ctrl+q", "quit", "Quit"),
+        Binding("ctrl+l", "clear_log", "Clear"),
+        Binding("ctrl+s", "run_scan", "Scan"),
+        Binding("ctrl+p", "run_pet", "Pet"),
+        Binding("pageup", "page_up", "Page up"),
+        Binding("pagedown", "page_down", "Page down"),
     ]
 
     CSS = APP_CSS
@@ -279,17 +349,18 @@ class NixUI(App):
     def compose(self) -> ComposeResult:
         with Vertical(id="app"):
             yield Header(show_clock=True)
-            yield Static("", id="pet-box")
-            with Horizontal(id="actions"):
-                yield Button("", id="btn-scan")
-                yield Button("", id="btn-status")
-                yield Button("", id="btn-pet")
-                yield Button("", id="btn-settings")
-                yield Button("", id="btn-help")
-                yield Button("", id="btn-clear")
-                yield Button("", id="btn-quit")
-            yield RichLog(id="log", wrap=True, markup=True, highlight=True,
-                          auto_scroll=True)
+            with VerticalScroll(id="main"):
+                yield Static("", id="pet-box")
+                with Horizontal(id="actions"):
+                    yield Button("", id="btn-scan")
+                    yield Button("", id="btn-status")
+                    yield Button("", id="btn-pet")
+                    yield Button("", id="btn-settings")
+                    yield Button("", id="btn-help")
+                    yield Button("", id="btn-clear")
+                    yield Button("", id="btn-quit")
+                yield RichLog(id="log", wrap=True, markup=True, highlight=True,
+                              auto_scroll=True)
             yield Input(id="cmd", placeholder="")
             yield Footer()
 
@@ -438,9 +509,9 @@ class NixUI(App):
 
         panel = Panel(
             body,
-            title=f"[bold {PURPLE}]{name}[/]",
+            title=f"[bold {BLUE}]{name}[/]",
             subtitle=f"{mood_label}  ·  {energy}%  ·  {self._t('pet.age')} {age}",
-            border_style=PURPLE,
+            border_style=CYAN,
         )
         box.update(panel)
 
