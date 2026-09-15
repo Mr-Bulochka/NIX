@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -19,47 +20,163 @@ if TYPE_CHECKING:
     from .config import Config
     from .scanner import ProjectInfo
 
-BG = "#11131d"
-SURFACE = "#16161e"
-BLACK = "#05070c"
-PANEL = "#0a0d15"
-FG = "#c0caf5"
-BLUE = "#7aa2f7"
-CYAN = "#7dcfff"
-PURPLE = "#bb9af7"
-GREEN = "#9ece6a"
-RED = "#f7768e"
-YELLOW = "#e0af68"
-DIM = "#565f89"
-ORANGE = "#ff9e64"
+BG = "#050505"
+BLACK = "#000000"
+PANEL = "#0b0b0d"
+RAISED = "#121214"
+BORDER = "#26262b"
+FG = "#c7ccd4"
+DIM = "#6b7280"
+BLUE = "#69a9e8"
+CYAN = "#85d3f5"
+GREEN = "#7fb572"
+RED = "#e06c75"
+YELLOW = "#d4a35c"
+PURPLE = "#a78bd6"
+PINK = "#ee8fa8"
 
 SPINNER = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
 
-PET_FRAMES = {
-    "seed": (
-        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
-        "   \u2502  .  .  \u2502\n"
-        "   \u2502   \u25aa    \u2502\n"
-        "   \u2570\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256f\n"
-        "      \u2502  \u2502"
-    ),
-    "sprout": (
-        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
-        "   \u2502  \u25c9  \u25c9  \u2502\n"
-        "   \u2502   \u25a3    \u2502\n"
-        "   \u2570\u2550\u2550\u2550\u252c\u252c\u2550\u2550\u2550\u256f\n"
-        "       \u2502\u2502\n"
-        "      \u2571  \u2572"
-    ),
-    "bloom": (
-        "   \u256d\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256e\n"
-        "   \u2502 \u25c9  \u25c9  \u2502\n"
-        "   \u2502   \u25c6    \u2502\n"
-        "   \u2570\u2550\u2550\u2550\u252c\u252c\u2550\u2550\u2550\u256f\n"
-        "     \u2571\u2571\u2502\u2502\u2572\u2572\n"
-        "    \u2571   \u2572   \u2572"
-    ),
+
+def _lerp(a: str, b: str, t: float) -> str:
+    al = [int(a[i : i + 2], 16) for i in (1, 3, 5)]
+    bl = [int(b[i : i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(
+        f"{round(al[k] + (bl[k] - al[k]) * t) & 255:02x}" for k in range(3)
+    )
+
+
+def _grad3(a: str, m: str, b: str, t: float) -> str:
+    return _lerp(a, m, t * 2) if t < 0.5 else _lerp(m, b, t * 2 - 1)
+
+
+_STAGE_PALETTES = {
+    "seed": {
+        "body_a": "#e8edf5", "body_b": "#aab3c7",
+        "outline": "#5d6675", "eye": "#39414f",
+        "glint": "#ffffff", "cheek": "#f2b0b0", "mouth": "#5d6675",
+        "leaf": None, "flower": None,
+    },
+    "sprout": {
+        "body_a": "#8fe3b1", "body_b": "#42b37f",
+        "outline": "#176a49", "eye": "#203a31",
+        "glint": "#eafff4", "cheek": "#f2b0b0", "mouth": "#176a49",
+        "leaf": "#4ade80", "flower": None,
+    },
+    "bloom": {
+        "body_a": "#f9a8d4", "body_m": "#b39df0", "body_b": "#83c6f0",
+        "outline": "#3a2f6d", "eye": "#33424f",
+        "glint": "#ffffff", "cheek": "#ff9db4", "mouth": "#3a2f6d",
+        "leaf": "#4ade80", "flower": "#ffd166",
+    },
 }
+
+_PET_GRIDS = {
+    "compact": {
+        "open": [
+            "..oooooooo..",
+            ".oBBBBBBBBo.",
+            ".oBwwBBwwBo.",
+            ".oBkkBBkkBo.",
+            ".oBpBMMBpBo.",
+            ".oBBBBBBBBo.",
+            "..oooooooo..",
+        ],
+        "blink": [
+            "..oooooooo..",
+            ".oBBBBBBBBo.",
+            ".oBkkBBkkBo.",
+            ".oBkkBBkkBo.",
+            ".oBpBMMBpBo.",
+            ".oBBBBBBBBo.",
+            "..oooooooo..",
+        ],
+    },
+    "full": {
+        "open": [
+            "..oooooooooo..",
+            ".oBBBBBBBBBBBo.",
+            ".obbbbbbbbbbbo.",
+            ".obbwkbbwkbbo.",
+            ".obbkkbbkkbbo.",
+            ".obbpbmmbpbbo.",
+            ".obbbbbbbbbbbo.",
+            ".oobbbbbbbbboo.",
+            "...oooooooo...",
+        ],
+        "blink": [
+            "..oooooooooo..",
+            ".oBBBBBBBBBBBo.",
+            ".obbbbbbbbbbbo.",
+            ".obbkkbbkkbbo.",
+            ".obbkkbbkkbbo.",
+            ".obbpbmmbpbbo.",
+            ".obbbbbbbbbbbo.",
+            ".oobbbbbbbbboo.",
+            "...oooooooo...",
+        ],
+    },
+}
+
+_OVERLAY = {
+    "sprout": "..ooLLoooo..",
+    "bloom": "..ooFFoooo..",
+}
+
+
+def _paint(grid: list[str], palette: dict) -> Text:
+    rows = len(grid)
+    text = Text()
+    for y, row in enumerate(grid):
+        i = 0
+        while i < len(row):
+            ch = row[i]
+            j = i
+            while j < len(row) and row[j] == ch:
+                j += 1
+            run = row[i:j]
+            if ch == ".":
+                color = BG
+            elif ch == "o":
+                color = palette["outline"]
+            elif ch in "bB":
+                t = y / max(1, rows - 1)
+                if "body_m" in palette:
+                    color = _grad3(palette["body_a"], palette["body_m"],
+                                   palette["body_b"], t)
+                else:
+                    color = _lerp(palette["body_a"], palette["body_b"], t)
+                if ch == "B":
+                    color = _lerp(color, "#ffffff", 0.18)
+            elif ch == "w":
+                color = palette["glint"]
+            elif ch == "k":
+                color = palette["eye"]
+            elif ch == "p":
+                color = palette["cheek"]
+            elif ch == "M" or ch == "m":
+                color = palette["mouth"]
+            elif ch == "L":
+                color = palette.get("leaf") or palette["outline"]
+            elif ch == "F":
+                color = palette.get("flower") or palette["cheek"]
+            else:
+                color = FG
+            text.append(run, style=color)
+            i = j
+        text.append("\n")
+    return text
+
+
+def pet_art(stage: str, size: str = "compact", blink: bool = False) -> Text:
+    stage = stage if stage in _STAGE_PALETTES else "seed"
+    size = size if size in _PET_GRIDS else "compact"
+    grid = list(_PET_GRIDS[size]["blink" if blink else "open"])
+    overlay = _OVERLAY.get(stage)
+    if overlay:
+        grid[0] = overlay
+    return _paint(grid, _STAGE_PALETTES[stage])
+
 
 MOOD_STYLES = {
     "curious": YELLOW,
@@ -77,12 +194,12 @@ MOOD_STYLES = {
 }
 
 KIND_COLORS = {
-    "SYSTEM": BLUE,
+    "SYSTEM": DIM,
     "SCAN": CYAN,
     "PET": PURPLE,
     "ERROR": RED,
     "WARN": YELLOW,
-    "MUTATION": ORANGE,
+    "MUTATION": YELLOW,
     "TEST": YELLOW,
     "LEARN": GREEN,
     "CHECKPOINT": BLUE,
@@ -91,49 +208,93 @@ KIND_COLORS = {
 APP_CSS = f"""
 Screen {{
     align: center middle;
-    background: {BG};
+    background: {BLACK};
 }}
 
 #app {{
     width: 100%;
-    max-width: 140;
+    max-width: 150;
     height: 100%;
-    border: round {BLUE};
     background: {BG};
 }}
 
-#main {{
-    height: 1fr;
-    overflow-y: auto;
-    scrollbar-size-vertical: 1;
-    scrollbar-color: {DIM} {BLACK};
+#top {{
+    height: auto;
+    margin: 1 2 0 2;
+    align: center middle;
+    background: {BG};
+}}
+
+#pet-wrap {{
+    width: auto;
+    height: auto;
+    align: center middle;
+    padding: 0 1;
 }}
 
 #pet-box {{
+    width: auto;
     height: auto;
-    max-height: 12;
+}}
+
+#pet-name-label {{
+    content-align: center middle;
+    color: {FG};
+    text-style: bold;
+    margin-top: 0;
+}}
+
+#pet-stats {{
+    width: auto;
+    height: auto;
+    padding: 1 1;
+    margin-left: 2;
+    border: round {BORDER};
+    background: {PANEL};
+}}
+
+#pet-stats .stat {{
+    height: 1;
+    width: auto;
+}}
+
+#logwrap {{
+    height: 1fr;
     margin: 1 2 0 2;
-}}
-
-#actions {{
-    height: auto;
-    padding: 1 2 0 2;
-}}
-
-#actions Horizontal {{
-    height: auto;
-    align: center middle;
-}}
-
-#actions Horizontal Button {{
-    margin: 0 1;
 }}
 
 #log {{
-    margin: 1 2 0 2;
+    background: {BLACK};
+    border: round {BORDER};
     padding: 0 1;
-    background: {PANEL};
-    border: round {BLUE};
+}}
+
+#toolbar {{
+    height: 1;
+    margin: 1 2 0 2;
+    align: center middle;
+    background: {BLACK};
+}}
+
+#toolbar Button {{
+    background: {BLACK};
+    color: {DIM};
+    border: none;
+    padding: 0 1;
+    min-width: 0;
+    min-height: 1;
+    height: 1;
+    margin: 0;
+}}
+
+#toolbar Button:hover {{
+    color: {BLUE};
+    text-style: bold;
+}}
+
+#toolbar Button:focus {{
+    color: {BLUE};
+    background: {RAISED};
 }}
 
 #cmd {{
@@ -141,18 +302,18 @@ Screen {{
     height: 3;
     margin: 0 2 1 2;
     padding: 0 1;
-    border: round {BLUE};
+    border: round {BORDER};
     background: {PANEL};
     color: {FG};
 }}
 
 #cmd:focus {{
-    border: round {CYAN};
+    border: round {BLUE};
 }}
 
 Footer {{
     background: {BLACK};
-    color: {CYAN};
+    color: {DIM};
 }}
 
 Footer > .footer--key {{
@@ -165,16 +326,16 @@ Header {{
 }}
 
 Header .header--title {{
-    color: {BLUE};
+    color: {FG};
 }}
 
 Header .header--clock {{
-    color: {CYAN};
+    color: {DIM};
 }}
 
 Scrollbar {{
     background: {BLACK};
-    color: {DIM};
+    color: {BORDER};
 }}
 
 Scrollbar:hover {{
@@ -183,17 +344,11 @@ Scrollbar:hover {{
 }}
 
 .Selection {{
-    background: {BLUE};
-    color: {BLACK};
+    background: {RAISED};
+    color: {BLUE};
 }}
 
-#btn-scan {{ background: {CYAN}; color: #11131d; }}
-#btn-status {{ background: {BLUE}; color: #11131d; }}
-#btn-pet {{ background: {PURPLE}; color: #11131d; }}
-#btn-settings {{ background: {GREEN}; color: #11131d; }}
-#btn-help {{ background: {YELLOW}; color: #11131d; }}
-#btn-clear {{ background: {ORANGE}; color: #11131d; }}
-#btn-quit {{ background: {RED}; color: #11131d; }}
+#top-scrollbar-hack {{ }}
 """
 
 
@@ -210,7 +365,7 @@ class FirstLaunchScreen(ModalScreen[dict]):
         max-height: 95%;
         padding: 1 2;
         align: center middle;
-        border: round {BLUE};
+        border: round {BORDER};
         background: {PANEL};
         scrollbar-size-vertical: 1;
         scrollbar-color: {DIM} {BLACK};
@@ -219,7 +374,7 @@ class FirstLaunchScreen(ModalScreen[dict]):
     #first-launch .title {{
         content-align: center middle;
         text-style: bold;
-        color: {GREEN};
+        color: {FG};
         text-align: center;
         margin: 0 0 1 0;
     }}
@@ -239,34 +394,35 @@ class FirstLaunchScreen(ModalScreen[dict]):
 
     #fl-select {{
         margin: 0 0 1 0;
-        border: round {BLUE};
+        border: round {BORDER};
         background: {BLACK};
         color: {FG};
     }}
 
     #fl-select:focus {{
-        border: round {CYAN};
+        border: round {BLUE};
     }}
 
     #pet-name {{
         margin: 0 0 1 0;
-        border: round {BLUE};
+        border: round {BORDER};
         background: {BLACK};
         color: {FG};
     }}
 
     #pet-name:focus {{
-        border: round {CYAN};
+        border: round {BLUE};
     }}
 
     #ok-btn {{
         margin: 1 0 0 0;
-        background: {BLUE};
-        color: {BLACK};
+        background: {RAISED};
+        color: {FG};
+        border: round {BORDER};
     }}
 
     #ok-btn:focus {{
-        border: round {CYAN};
+        border: round {BLUE};
     }}
     """
 
@@ -324,6 +480,92 @@ class FirstLaunchScreen(ModalScreen[dict]):
         self.dismiss({"name": name, "language": self._lang})
 
 
+class DetailModal(ModalScreen[None]):
+    BINDINGS = [
+        Binding("escape", "close", "Close", priority=True),
+        Binding("ctrl+q", "close", "", priority=True),
+    ]
+
+    CSS = f"""
+    DetailModal {{
+        align: center middle;
+    }}
+
+    #dm-frame {{
+        width: 84%;
+        max-width: 100;
+        height: 84%;
+        max-height: 42;
+        border: round {BORDER};
+        background: {PANEL};
+        padding: 0 1;
+    }}
+
+    #dm-title {{
+        height: 1;
+        margin: 1 0 0 0;
+        color: {BLUE};
+        text-style: bold;
+        content-align: left middle;
+    }}
+
+    #dm-body {{
+        height: 1fr;
+        overflow-y: auto;
+        scrollbar-size-vertical: 1;
+        scrollbar-color: {DIM} {BLACK};
+    }}
+
+    #dm-content {{
+        padding: 1 0;
+    }}
+
+    #dm-close {{
+        dock: bottom;
+        width: 100%;
+        margin: 1 0 1 0;
+        background: {RAISED};
+        border: round {BORDER};
+        color: {FG};
+    }}
+
+    #dm-close:hover {{
+        border: round {BLUE};
+        color: {BLUE};
+    }}
+
+    Scrollbar {{
+        background: {BLACK};
+        color: {BORDER};
+    }}
+
+    Scrollbar:hover {{
+        background: {BLACK};
+        color: {BLUE};
+    }}
+    """
+
+    def __init__(self, title: str, renderable, close: str) -> None:
+        super().__init__()
+        self._title = title
+        self._renderable = renderable
+        self._close = close
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dm-frame"):
+            yield Label(self._title, id="dm-title")
+            with VerticalScroll(id="dm-body"):
+                yield Static(self._renderable, id="dm-content")
+            yield Button(self._close, id="dm-close")
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "dm-close":
+            self.dismiss(None)
+
+
 class NixUI(App):
     ENABLE_COMMAND_PALETTE = False
 
@@ -342,26 +584,31 @@ class NixUI(App):
         super().__init__()
         self.nix = nix
         self._spin = 0
+        self._blink = 0
 
     # ----- lifecycle -------------------------------------------------
 
     def compose(self) -> ComposeResult:
         with Vertical(id="app"):
             yield Header(show_clock=True)
-            with VerticalScroll(id="main"):
-                yield Static("", id="pet-box")
-                with Vertical(id="actions"):
-                    with Horizontal():
-                        yield Button("", id="btn-scan")
-                        yield Button("", id="btn-status")
-                        yield Button("", id="btn-pet")
-                    with Horizontal():
-                        yield Button("", id="btn-settings")
-                        yield Button("", id="btn-help")
-                        yield Button("", id="btn-clear")
-                        yield Button("", id="btn-quit")
-                yield RichLog(id="log", wrap=True, markup=True, highlight=True,
-                              auto_scroll=True)
+            with Horizontal(id="top"):
+                with Vertical(id="pet-wrap"):
+                    yield Static("", id="pet-box")
+                    yield Label("", id="top-pet-name")
+                with Vertical(id="pet-stats"):
+                    yield Label("", id="st-mood", classes="stat")
+                    yield Label("", id="st-energy", classes="stat")
+                    yield Label("", id="st-stage", classes="stat")
+            with VerticalScroll(id="logwrap"):
+                yield RichLog(id="log", wrap=True, markup=True,
+                              highlight=True, auto_scroll=True)
+            with Horizontal(id="toolbar"):
+                yield Button("", id="btn-help")
+                yield Button("", id="btn-pet")
+                yield Button("", id="btn-scan")
+                yield Button("", id="btn-status")
+                yield Button("", id="btn-settings")
+                yield Button("", id="btn-quit")
             yield Input(id="cmd", placeholder="")
             yield Footer()
 
@@ -393,7 +640,6 @@ class NixUI(App):
             "btn-pet": "/pet",
             "btn-settings": "/settings",
             "btn-help": "/help",
-            "btn-clear": "/clear",
             "btn-quit": "/quit",
         }
         action = mapping.get(event.button.id)
@@ -433,7 +679,6 @@ class NixUI(App):
         self.query_one("#btn-pet", Button).label = self._t("btn.pet")
         self.query_one("#btn-settings", Button).label = self._t("btn.settings")
         self.query_one("#btn-help", Button).label = self._t("btn.help")
-        self.query_one("#btn-clear", Button).label = self._t("btn.clear")
         self.query_one("#btn-quit", Button).label = self._t("btn.quit")
         self.query_one("#cmd", Input).placeholder = self._t("cmd.placeholder")
         self._refresh_header()
@@ -482,39 +727,64 @@ class NixUI(App):
 
     def _tick(self) -> None:
         self._spin = (self._spin + 1) % len(SPINNER)
+        self._blink = (self._blink + 1) % 4
         self._refresh_pet(animate=True)
 
     def _refresh_pet(self, animate: bool = False) -> None:
         pet = self.nix.pet or {}
         box = self.query_one("#pet-box", Static)
+        name_label = self.query_one("#top-pet-name", Label)
         if not pet:
             box.update(Text(self._t("pet.no_pet"), style=DIM))
+            name_label.update("")
+            self._set_stat("#st-mood", "", DIM)
+            self._set_stat("#st-energy", "", DIM)
+            self._set_stat("#st-stage", "", DIM)
             return
 
         pattern = pet.get("body_pattern", "seed")
-        art = PET_FRAMES.get(pattern, PET_FRAMES["seed"])
+        pattern_label = self._t(f"pet.pattern.{pattern}")
+        blink = animate and self._blink == 1
+        art = pet_art(pattern, "compact", blink=blink)
+        name = pet.get("name", "???")
         mood = pet.get("mood", "curious")
         mood_style = MOOD_STYLES.get(mood, FG)
         mood_label = self._t(f"mood.{mood}")
-        energy = pet.get("energy", 100)
-        age = pet.get("age", 0)
-        name = pet.get("name", "???")
-        spinner = SPINNER[self._spin] if animate else "\u25cf"
+        energy = int(pet.get("energy", 100))
+        age = int(pet.get("age", 0))
 
-        body = Text()
-        for i, line in enumerate(art.split("\n")):
-            body.append(line + "  ", style=CYAN)
-            if i == 0:
-                body.append(spinner, style=YELLOW)
-            body.append("\n")
+        name_label.update(name)
 
-        panel = Panel(
-            body,
-            title=f"[bold {BLUE}]{name}[/]",
-            subtitle=f"{mood_label}  ·  {energy}%  ·  {self._t('pet.age')} {age}",
-            border_style=CYAN,
+        self._set_stat("#st-mood",
+                       f"{self._t('pet.mood')}: [{mood_style}]{mood_label}[/]",
+                       mood_style)
+        bar = self._energy_bar(energy)
+        self._set_stat(
+            "#st-energy",
+            f"{self._t('pet.energy')}: {bar} {energy}%",
+            FG,
         )
-        box.update(panel)
+        self._set_stat(
+            "#st-stage",
+            f"{self._t('pet.stage')}: {pattern_label}  \u00b7  "
+            f"{self._t('pet.age')} {age}",
+            DIM,
+        )
+        box.update(art)
+
+    def _energy_bar(self, energy: int) -> str:
+        filled = round(energy / 100 * 10)
+        color = GREEN if energy >= 50 else (YELLOW if energy >= 25 else RED)
+        return ("\u2588" * filled + "\u2591" * (10 - filled)).replace(
+            "\u2588", f"[{color}]\u2588[/]"
+        )
+
+    def _set_stat(self, query: str, text: str, color: str) -> None:
+        try:
+            label = self.query_one(query, Label)
+            label.update(Text.from_markup(text, style=color))
+        except Exception:
+            pass
 
     # ----- public API (used by commands) -----------------------------
 
@@ -529,20 +799,24 @@ class NixUI(App):
 
     def show_help(self, lines: list[str]) -> None:
         table = Table(
-            title=self._t("tbl.commands"),
             box=None,
-            header_style=f"bold {CYAN}",
             expand=True,
+            pad_edge=False,
         )
-        table.add_column(self._t("tbl.command"), style=GREEN, no_wrap=True)
-        table.add_column(self._t("tbl.description"), style=FG)
         for line in lines:
             parts = line.strip().split(None, 1)
-            if len(parts) == 2:
-                table.add_row(parts[0], parts[1])
-            else:
-                table.add_row(line, "")
-        self._log().write(table)
+            left = parts[0] if parts else line.strip()
+            right = parts[1] if len(parts) == 2 else ""
+            table.add_row(
+                Text(left, style=GREEN),
+                Text(right, style=FG),
+            )
+        self._open_modal(self._t("tbl.commands"), table)
+
+    def _open_modal(self, title: str, renderable) -> None:
+        self.push_screen(
+            DetailModal(title, renderable, self._t("modal.close"))
+        )
 
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
@@ -552,13 +826,14 @@ class NixUI(App):
         table = Table(
             title=t("tbl.project_status"),
             header_style=f"bold {BLUE}",
-            border_style=DIM,
+            border_style=BORDER,
             expand=True,
+            pad_edge=False,
         )
-        table.add_column(t("tbl.key"), style=GREEN)
+        table.add_column(t("tbl.key"), style=GREEN, no_wrap=True)
         table.add_column(t("tbl.value"), style=FG)
         table.add_row(t("st.root"), root)
-        table.add_row(t("st.mode"), f"[{BLUE}]{mode.upper()}[/]")
+        table.add_row(t("st.mode"), mode.upper())
         table.add_row(t("st.attempts"), str(attempts))
         table.add_row(t("st.files"), str(files))
         table.add_row(t("st.dirs"), str(dirs))
@@ -566,7 +841,7 @@ class NixUI(App):
         table.add_row(t("st.functions"), str(functions))
         table.add_row(t("st.classes"), str(classes))
         table.add_row(t("st.lines"), f"{total_lines:,}")
-        self._log().write(table)
+        self._open_modal(t("tbl.project_status"), table)
 
     def show_scan(self, info: "ProjectInfo") -> None:
         t = self._t
@@ -576,44 +851,52 @@ class NixUI(App):
         header.append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
         header.append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
         header.append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
-        self._log().write(header)
+        header.append("\n")
 
         if info.extensions:
             table = Table(
                 title=t("tbl.extensions"),
                 header_style=f"bold {PURPLE}",
-                border_style=DIM,
+                border_style=BORDER,
                 expand=True,
+                pad_edge=False,
             )
             table.add_column(t("tbl.extension"), style=FG)
             table.add_column(t("tbl.count"), justify="right", style=GREEN)
             for ext, count in info.top_extensions:
                 table.add_row(ext, str(count))
-            self._log().write(table)
+            self._open_modal(t("tbl.scan"), Group(header, table))
+        else:
+            self._open_modal(t("tbl.scan"), header)
 
     def show_pet(self, pet: dict) -> None:
         mood = pet.get("mood", "curious")
-        mood_style = MOOD_STYLES.get(mood, FG)
         mood_label = self._t(f"mood.{mood}")
-        table = Table(
+        art = pet_art(pet.get("body_pattern", "seed"), "full",
+                      blink=self._blink == 1)
+        stat = Table(
             title=self._t("tbl.pet", name=pet.get("name", "???")),
             header_style=f"bold {PURPLE}",
-            border_style=DIM,
+            border_style=BORDER,
             expand=True,
+            pad_edge=False,
         )
-        table.add_column(self._t("tbl.attribute"), style=CYAN)
-        table.add_column(self._t("tbl.value"), style=FG)
-        table.add_row(self._t("pet.name"), str(pet.get("name", "???")))
-        table.add_row(self._t("pet.mood"), f"[{mood_style}]{mood_label}[/]")
-        table.add_row(self._t("pet.energy"), str(pet.get("energy", 100)))
-        table.add_row(self._t("pet.age"), str(pet.get("age", 0)))
-        table.add_row(self._t("pet.body"), pet.get("body_pattern", "seed"))
-        table.add_row(self._t("pet.stage"), str(pet.get("stage", 1)))
-        table.add_row(self._t("pet.mutations"),
-                      str(pet.get("mutations_witnessed", 0)))
-        table.add_row(self._t("pet.failures"),
-                      str(pet.get("failures_survived", 0)))
-        self._log().write(table)
+        stat.add_column(self._t("tbl.attribute"), style=CYAN, no_wrap=True)
+        stat.add_column(self._t("tbl.value"), style=FG)
+        stat.add_row(self._t("pet.name"), str(pet.get("name", "???")))
+        stat.add_row(self._t("pet.mood"),
+                     f"[{MOOD_STYLES.get(mood, FG)}]{mood_label}[/]")
+        stat.add_row(self._t("pet.energy"), str(pet.get("energy", 100)))
+        stat.add_row(self._t("pet.age"), str(pet.get("age", 0)))
+        stat.add_row(self._t("pet.body"),
+                     self._t(f"pet.pattern.{pet.get('body_pattern', 'seed')}"))
+        stat.add_row(self._t("pet.stage"), str(pet.get("stage", 1)))
+        stat.add_row(self._t("pet.mutations"),
+                     str(pet.get("mutations_witnessed", 0)))
+        stat.add_row(self._t("pet.failures"),
+                     str(pet.get("failures_survived", 0)))
+        self._open_modal(self._t("tbl.pet", name=pet.get("name", "???")),
+                         Group(art, stat))
 
     def show_settings(self, config: "Config") -> None:
         t = self._t
@@ -621,10 +904,11 @@ class NixUI(App):
         table = Table(
             title=t("tbl.settings"),
             header_style=f"bold {GREEN}",
-            border_style=DIM,
+            border_style=BORDER,
             expand=True,
+            pad_edge=False,
         )
-        table.add_column(t("tbl.setting"), style=GREEN)
+        table.add_column(t("tbl.setting"), style=GREEN, no_wrap=True)
         table.add_column(t("tbl.value"), style=FG)
         table.add_row(t("set.language"), config.language)
         table.add_row(t("set.theme"), config.theme)
@@ -642,7 +926,7 @@ class NixUI(App):
         table.add_row(t("set.git"), on if config.git_auto_commit else off)
         table.add_row(t("set.protected"),
                       ", ".join(config.protected_paths or []))
-        self._log().write(table)
+        self._open_modal(t("tbl.settings"), table)
 
     def show_logs(self, path: object, lines: list[str]) -> None:
         if not lines:
@@ -651,10 +935,9 @@ class NixUI(App):
         log_text = Text()
         for line in lines:
             log_text.append(line + "\n", style=DIM)
-        self._log().write(
-            Panel(log_text,
-                  title=f"{self._t('tbl.session_log')} \u00b7 {path}",
-                  border_style=DIM)
+        self._open_modal(
+            self._t("tbl.session_log"),
+            Panel(log_text, border_style=BORDER),
         )
 
     def show_history(self, entries: list[dict]) -> None:
@@ -664,8 +947,9 @@ class NixUI(App):
         table = Table(
             title=self._t("tbl.journal"),
             header_style=f"bold {BLUE}",
-            border_style=DIM,
+            border_style=BORDER,
             expand=True,
+            pad_edge=False,
         )
         table.add_column(self._t("tbl.time"), style=DIM)
         table.add_column(self._t("tbl.kind"), style=GREEN)
@@ -673,7 +957,7 @@ class NixUI(App):
         for entry in entries:
             table.add_row(entry.get("ts", ""), entry.get("kind", ""),
                           entry.get("message", ""))
-        self._log().write(table)
+        self._open_modal(self._t("tbl.journal"), table)
 
     def show_error(self, text: str) -> None:
         self.show_message("ERROR", text)

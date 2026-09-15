@@ -67,7 +67,11 @@ class TestTUI(unittest.TestCase):
                 await pilot.pause()
                 await pilot.click("#btn-scan")
                 await pilot.pause()
+                await pilot.press("escape")
+                await pilot.pause()
                 await pilot.click("#btn-status")
+                await pilot.pause()
+                await pilot.press("escape")
                 await pilot.pause()
                 from textual.widgets import Input
                 cmd = pilot.app.query_one("#cmd", Input)

@@ -47,6 +47,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.extensions": "Extensions",
         "tbl.extension": "Extension",
         "tbl.count": "Count",
+        "tbl.scan": "Scan Summary",
         "tbl.pet": "Pet: {name}",
         "tbl.attribute": "Attribute",
         "tbl.settings": "Settings",
@@ -56,6 +57,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.time": "Time",
         "tbl.kind": "Kind",
         "tbl.message": "Message",
+        "modal.close": "Close (Esc)",
 
         # status rows
         "st.root": "Root",
@@ -75,6 +77,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.age": "Age",
         "pet.body": "Body",
         "pet.stage": "Stage",
+        "pet.pattern.seed": "Seed",
+        "pet.pattern.sprout": "Sprout",
+        "pet.pattern.bloom": "Bloom",
+        "pet.pattern.seed": "Seed",
+        "pet.pattern.sprout": "Sprout",
+        "pet.pattern.bloom": "Bloom",
         "pet.mutations": "Mutations",
         "pet.failures": "Failures",
 
@@ -189,6 +197,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.extensions": "Расширения",
         "tbl.extension": "Расширение",
         "tbl.count": "Количество",
+        "tbl.scan": "Сводка сканирования",
         "tbl.pet": "Питомец: {name}",
         "tbl.attribute": "Атрибут",
         "tbl.settings": "Настройки",
@@ -198,6 +207,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.time": "Время",
         "tbl.kind": "Тип",
         "tbl.message": "Сообщение",
+        "modal.close": "Закрыть (Esc)",
 
         # status rows
         "st.root": "Корень",
@@ -217,6 +227,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.age": "Возраст",
         "pet.body": "Тело",
         "pet.stage": "Стадия",
+        "pet.pattern.seed": "Семечко",
+        "pet.pattern.sprout": "Росток",
+        "pet.pattern.bloom": "Цветение",
         "pet.mutations": "Мутации",
         "pet.failures": "Провалы",
 
