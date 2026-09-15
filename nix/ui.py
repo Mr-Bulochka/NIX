@@ -118,10 +118,14 @@ Screen {{
 #actions {{
     height: auto;
     padding: 1 2 0 2;
+}}
+
+#actions Horizontal {{
+    height: auto;
     align: center middle;
 }}
 
-#actions Button {{
+#actions Horizontal Button {{
     margin: 0 1;
 }}
 
@@ -226,20 +230,15 @@ class FirstLaunchScreen(ModalScreen[dict]):
         text-align: center;
     }}
 
-    #first-launch .field {{
-        height: auto;
-        align: center middle;
-    }}
-
     #first-launch .flabel {{
-        width: 32;
-        height: 3;
+        height: 1;
+        margin: 1 0 0 0;
         content-align: left middle;
         color: {CYAN};
-        margin-right: 1;
     }}
 
     #fl-select {{
+        margin: 0 0 1 0;
         border: round {BLUE};
         background: {BLACK};
         color: {FG};
@@ -280,17 +279,15 @@ class FirstLaunchScreen(ModalScreen[dict]):
             yield Label("", id="fl-title", classes="title")
             yield Label("", id="fl-hint1", classes="hint")
             yield Label("", id="fl-hint2", classes="hint")
-            with Horizontal(classes="field"):
-                yield Label("", id="fl-lang-label", classes="flabel")
-                yield Select(
-                    [("English", "en"), ("Русский", "ru")],
-                    value=self._lang,
-                    allow_blank=False,
-                    id="fl-select",
-                )
-            with Horizontal(classes="field"):
-                yield Label("", id="fl-name-label", classes="flabel")
-                yield Input(placeholder="", id="pet-name")
+            yield Label("", id="fl-lang-label", classes="flabel")
+            yield Select(
+                [("English", "en"), ("Русский", "ru")],
+                value=self._lang,
+                allow_blank=False,
+                id="fl-select",
+            )
+            yield Label("", id="fl-name-label", classes="flabel")
+            yield Input(placeholder="", id="pet-name")
             yield Button("", id="ok-btn", variant="primary")
 
     def on_mount(self) -> None:
@@ -328,13 +325,15 @@ class FirstLaunchScreen(ModalScreen[dict]):
 
 
 class NixUI(App):
+    ENABLE_COMMAND_PALETTE = False
+
     BINDINGS = [
-        Binding("ctrl+q", "quit", "Quit"),
-        Binding("ctrl+l", "clear_log", "Clear"),
-        Binding("ctrl+s", "run_scan", "Scan"),
-        Binding("ctrl+p", "run_pet", "Pet"),
-        Binding("pageup", "page_up", "Page up"),
-        Binding("pagedown", "page_down", "Page down"),
+        Binding("ctrl+q", "quit", "Quit", priority=True),
+        Binding("ctrl+l", "clear_log", "Clear", priority=True),
+        Binding("ctrl+s", "run_scan", "Scan", priority=True),
+        Binding("ctrl+p", "run_pet", "Pet", priority=True),
+        Binding("pageup", "page_up", "Page up", priority=True),
+        Binding("pagedown", "page_down", "Page down", priority=True),
     ]
 
     CSS = APP_CSS
@@ -351,14 +350,16 @@ class NixUI(App):
             yield Header(show_clock=True)
             with VerticalScroll(id="main"):
                 yield Static("", id="pet-box")
-                with Horizontal(id="actions"):
-                    yield Button("", id="btn-scan")
-                    yield Button("", id="btn-status")
-                    yield Button("", id="btn-pet")
-                    yield Button("", id="btn-settings")
-                    yield Button("", id="btn-help")
-                    yield Button("", id="btn-clear")
-                    yield Button("", id="btn-quit")
+                with Vertical(id="actions"):
+                    with Horizontal():
+                        yield Button("", id="btn-scan")
+                        yield Button("", id="btn-status")
+                        yield Button("", id="btn-pet")
+                    with Horizontal():
+                        yield Button("", id="btn-settings")
+                        yield Button("", id="btn-help")
+                        yield Button("", id="btn-clear")
+                        yield Button("", id="btn-quit")
                 yield RichLog(id="log", wrap=True, markup=True, highlight=True,
                               auto_scroll=True)
             yield Input(id="cmd", placeholder="")
