@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nix-local-agent"
+version = "0.2.0"
+description = "NIX — local-first project-aware testing agent"
+requires-python = ">=3.11"
+dependencies = [
+    "rich>=13",
+    "prompt_toolkit>=3.0",
+]
+
+[project.scripts]
+nix = "nix.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nix*"]
