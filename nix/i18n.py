@@ -58,6 +58,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.kind": "Kind",
         "tbl.message": "Message",
         "modal.close": "Close (Esc)",
+        "set.saved": "Settings saved",
 
         # status rows
         "st.root": "Root",
@@ -76,6 +77,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.energy": "Energy",
         "pet.age": "Age",
         "pet.body": "Body",
+        "pet.scans": "Scans",
         "pet.stage": "Stage",
         "pet.pattern.seed": "Seed",
         "pet.pattern.sprout": "Sprout",
@@ -208,6 +210,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.kind": "Тип",
         "tbl.message": "Сообщение",
         "modal.close": "Закрыть (Esc)",
+        "set.saved": "Настройки сохранены",
 
         # status rows
         "st.root": "Корень",
@@ -226,6 +229,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.energy": "Энергия",
         "pet.age": "Возраст",
         "pet.body": "Тело",
+        "pet.scans": "Сканы",
         "pet.stage": "Стадия",
         "pet.pattern.seed": "Семечко",
         "pet.pattern.sprout": "Росток",

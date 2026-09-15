@@ -14,7 +14,17 @@ DEFAULT_PET = {
     "mutations_witnessed": 0,
     "failures_survived": 0,
     "projects_seen": 0,
+    "scans": 0,
 }
+
+STAGES = {
+    "seed": 0,
+    "sprout": 1,
+    "bloom": 2,
+    "mystic": 3,
+}
+
+STAGE_AGE_LIMITS = [("mystic", 35), ("bloom", 15), ("sprout", 5)]
 
 
 class Pet:
@@ -64,6 +74,27 @@ class Pet:
             pet["energy"] = min(100, pet.get("energy", 100) + 5)
         elif event in ("failure", "error"):
             pet["energy"] = max(0, pet.get("energy", 100) - 3)
+        if event == "scan":
+            pet["scans"] = pet.get("scans", 0) + 1
 
         pet["age"] = pet.get("age", 0) + 1
+        pet["projects_seen"] = pet.get("projects_seen", 0)
+        return self._evolve(pet)
+
+    def _evolve(self, pet: dict) -> dict:
+        age = pet.get("age", 0)
+        stage = "seed"
+        for name, limit in STAGE_AGE_LIMITS:
+            if age >= limit:
+                stage = name
+                break
+        if pet.get("body_pattern") != stage:
+            pet["body_pattern"] = stage
+            level = STAGES.get(stage, 0)
+            if level > pet.get("evolution_level", 0):
+                pet["evolution_level"] = level
+            pet["mutations_witnessed"] = min(
+                level + pet.get("scans", 0) // 8,
+                level * 2 + 1,
+            )
         return pet

@@ -3,17 +3,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from rich.console import Group
-from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
+from textual.widgets import (
+    Button, Footer, Header, Input, Label, RichLog, Select, Static, Switch,
+)
 
-from .i18n import t as _t
+from .avatar import render as render_avatar
+from .i18n import LANGUAGES, t as _t
+
+MODES = ("local", "safe", "git")
 
 if TYPE_CHECKING:
     from .app import NixApp
@@ -36,146 +38,6 @@ PURPLE = "#a78bd6"
 PINK = "#ee8fa8"
 
 SPINNER = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
-
-
-def _lerp(a: str, b: str, t: float) -> str:
-    al = [int(a[i : i + 2], 16) for i in (1, 3, 5)]
-    bl = [int(b[i : i + 2], 16) for i in (1, 3, 5)]
-    return "#" + "".join(
-        f"{round(al[k] + (bl[k] - al[k]) * t) & 255:02x}" for k in range(3)
-    )
-
-
-def _grad3(a: str, m: str, b: str, t: float) -> str:
-    return _lerp(a, m, t * 2) if t < 0.5 else _lerp(m, b, t * 2 - 1)
-
-
-_STAGE_PALETTES = {
-    "seed": {
-        "body_a": "#e8edf5", "body_b": "#aab3c7",
-        "outline": "#5d6675", "eye": "#39414f",
-        "glint": "#ffffff", "cheek": "#f2b0b0", "mouth": "#5d6675",
-        "leaf": None, "flower": None,
-    },
-    "sprout": {
-        "body_a": "#8fe3b1", "body_b": "#42b37f",
-        "outline": "#176a49", "eye": "#203a31",
-        "glint": "#eafff4", "cheek": "#f2b0b0", "mouth": "#176a49",
-        "leaf": "#4ade80", "flower": None,
-    },
-    "bloom": {
-        "body_a": "#f9a8d4", "body_m": "#b39df0", "body_b": "#83c6f0",
-        "outline": "#3a2f6d", "eye": "#33424f",
-        "glint": "#ffffff", "cheek": "#ff9db4", "mouth": "#3a2f6d",
-        "leaf": "#4ade80", "flower": "#ffd166",
-    },
-}
-
-_PET_GRIDS = {
-    "compact": {
-        "open": [
-            "..oooooooo..",
-            ".oBBBBBBBBo.",
-            ".oBwwBBwwBo.",
-            ".oBkkBBkkBo.",
-            ".oBpBMMBpBo.",
-            ".oBBBBBBBBo.",
-            "..oooooooo..",
-        ],
-        "blink": [
-            "..oooooooo..",
-            ".oBBBBBBBBo.",
-            ".oBkkBBkkBo.",
-            ".oBkkBBkkBo.",
-            ".oBpBMMBpBo.",
-            ".oBBBBBBBBo.",
-            "..oooooooo..",
-        ],
-    },
-    "full": {
-        "open": [
-            "..oooooooooo..",
-            ".oBBBBBBBBBBBo.",
-            ".obbbbbbbbbbbo.",
-            ".obbwkbbwkbbo.",
-            ".obbkkbbkkbbo.",
-            ".obbpbmmbpbbo.",
-            ".obbbbbbbbbbbo.",
-            ".oobbbbbbbbboo.",
-            "...oooooooo...",
-        ],
-        "blink": [
-            "..oooooooooo..",
-            ".oBBBBBBBBBBBo.",
-            ".obbbbbbbbbbbo.",
-            ".obbkkbbkkbbo.",
-            ".obbkkbbkkbbo.",
-            ".obbpbmmbpbbo.",
-            ".obbbbbbbbbbbo.",
-            ".oobbbbbbbbboo.",
-            "...oooooooo...",
-        ],
-    },
-}
-
-_OVERLAY = {
-    "sprout": "..ooLLoooo..",
-    "bloom": "..ooFFoooo..",
-}
-
-
-def _paint(grid: list[str], palette: dict) -> Text:
-    rows = len(grid)
-    text = Text()
-    for y, row in enumerate(grid):
-        i = 0
-        while i < len(row):
-            ch = row[i]
-            j = i
-            while j < len(row) and row[j] == ch:
-                j += 1
-            run = row[i:j]
-            if ch == ".":
-                color = BG
-            elif ch == "o":
-                color = palette["outline"]
-            elif ch in "bB":
-                t = y / max(1, rows - 1)
-                if "body_m" in palette:
-                    color = _grad3(palette["body_a"], palette["body_m"],
-                                   palette["body_b"], t)
-                else:
-                    color = _lerp(palette["body_a"], palette["body_b"], t)
-                if ch == "B":
-                    color = _lerp(color, "#ffffff", 0.18)
-            elif ch == "w":
-                color = palette["glint"]
-            elif ch == "k":
-                color = palette["eye"]
-            elif ch == "p":
-                color = palette["cheek"]
-            elif ch == "M" or ch == "m":
-                color = palette["mouth"]
-            elif ch == "L":
-                color = palette.get("leaf") or palette["outline"]
-            elif ch == "F":
-                color = palette.get("flower") or palette["cheek"]
-            else:
-                color = FG
-            text.append(run, style=color)
-            i = j
-        text.append("\n")
-    return text
-
-
-def pet_art(stage: str, size: str = "compact", blink: bool = False) -> Text:
-    stage = stage if stage in _STAGE_PALETTES else "seed"
-    size = size if size in _PET_GRIDS else "compact"
-    grid = list(_PET_GRIDS[size]["blink" if blink else "open"])
-    overlay = _OVERLAY.get(stage)
-    if overlay:
-        grid[0] = overlay
-    return _paint(grid, _STAGE_PALETTES[stage])
 
 
 MOOD_STYLES = {
@@ -480,47 +342,74 @@ class FirstLaunchScreen(ModalScreen[dict]):
         self.dismiss({"name": name, "language": self._lang})
 
 
-class DetailModal(ModalScreen[None]):
+class SettingsModal(ModalScreen[None]):
     BINDINGS = [
-        Binding("escape", "close", "Close", priority=True),
-        Binding("ctrl+q", "close", "", priority=True),
+        Binding("escape", "save_and_close", "Close", priority=True),
+        Binding("ctrl+q", "save_and_close", "", priority=True),
     ]
 
+    TOGGLE_KEYS = {
+        "set-tamagotchi": "tamagotchi_enabled",
+        "set-animations": "animations_enabled",
+        "set-avatar": "avatar_enabled",
+        "set-sounds": "sounds_enabled",
+        "set-auto-scan": "auto_scan",
+        "set-checkpoint": "checkpoint_on_mutate",
+        "set-git": "git_auto_commit",
+    }
+
     CSS = f"""
-    DetailModal {{
+    SettingsModal {{
         align: center middle;
     }}
 
-    #dm-frame {{
-        width: 84%;
-        max-width: 100;
-        height: 84%;
-        max-height: 42;
+    #set-frame {{
+        width: 88%;
+        max-width: 84;
+        height: 88%;
+        max-height: 46;
         border: round {BORDER};
         background: {PANEL};
         padding: 0 1;
     }}
 
-    #dm-title {{
+    #set-title {{
         height: 1;
         margin: 1 0 0 0;
         color: {BLUE};
         text-style: bold;
-        content-align: left middle;
     }}
 
-    #dm-body {{
+    #set-body {{
         height: 1fr;
         overflow-y: auto;
         scrollbar-size-vertical: 1;
         scrollbar-color: {DIM} {BLACK};
     }}
 
-    #dm-content {{
-        padding: 1 0;
+    #set-body .set-row {{
+        height: auto;
+        margin: 1 0 0 0;
+        align: center middle;
     }}
 
-    #dm-close {{
+    #set-body .set-label {{
+        width: 32;
+        color: {FG};
+        content-align: left middle;
+        padding: 0 1 0 0;
+    }}
+
+    #set-body .set-field {{
+        width: 1fr;
+    }}
+
+    #set-body .set-hint {{
+        color: {DIM};
+        height: 1;
+    }}
+
+    #set-close {{
         dock: bottom;
         width: 100%;
         margin: 1 0 1 0;
@@ -529,41 +418,147 @@ class DetailModal(ModalScreen[None]):
         color: {FG};
     }}
 
-    #dm-close:hover {{
+    #set-close:hover {{
         border: round {BLUE};
         color: {BLUE};
+    }}
+
+    Select {{
+        background: {BLACK};
+        border: round {BORDER};
+    }}
+
+    Select:focus {{
+        border: round {BLUE};
+    }}
+
+    Input {{
+        background: {BLACK};
+        border: round {BORDER};
+    }}
+
+    Input:focus {{
+        border: round {BLUE};
+    }}
+
+    Switch {{
+        background: {BLACK};
     }}
 
     Scrollbar {{
         background: {BLACK};
         color: {BORDER};
     }}
-
-    Scrollbar:hover {{
-        background: {BLACK};
-        color: {BLUE};
-    }}
     """
 
-    def __init__(self, title: str, renderable, close: str) -> None:
+    def __init__(self, ui: "NixUI", config: "Config", save) -> None:
         super().__init__()
-        self._title = title
-        self._renderable = renderable
-        self._close = close
+        self._ui = ui
+        self._cfg = config
+        self._save = save
+
+    def _t(self, key: str, **kw) -> str:
+        return self._ui._t(key, **kw)
+
+    def _row(self, label: str, field) -> Horizontal:
+        return Horizontal(
+            Label(label, classes="set-label"),
+            field,
+            classes="set-row",
+        )
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="dm-frame"):
-            yield Label(self._title, id="dm-title")
-            with VerticalScroll(id="dm-body"):
-                yield Static(self._renderable, id="dm-content")
-            yield Button(self._close, id="dm-close")
+        t = self._t
+        cfg = self._cfg
+        with Vertical(id="set-frame"):
+            yield Label(t("tbl.settings"), id="set-title")
+            with VerticalScroll(id="set-body"):
+                yield self._row(
+                    t("set.language"),
+                    Select(
+                        [(LANGUAGES[k], k) for k in LANGUAGES],
+                        value=cfg.language,
+                        id="set-lang",
+                    ),
+                )
+                yield self._row(
+                    t("st.mode"),
+                    Select(
+                        [(t(f"cmd.mode.{m}"), m) for m in MODES],
+                        value=cfg.mode,
+                        id="set-mode",
+                    ),
+                )
+                yield self._row(
+                    t("set.attempts"),
+                    Input(str(cfg.attempts), id="set-attempts"),
+                )
+                yield self._row(
+                    t("set.mutation_budget"),
+                    Input(str(cfg.mutation_budget), id="set-budget"),
+                )
+                for wid, key in self.TOGGLE_KEYS.items():
+                    yield self._row(
+                        t(self._toggle_label(wid)),
+                        Switch(getattr(cfg, key), id=wid),
+                    )
+            yield Button("", id="set-close")
 
-    def action_close(self) -> None:
+    def _toggle_label(self, wid: str) -> str:
+        return self._t({
+            "set-tamagotchi": "set.tamagotchi",
+            "set-animations": "set.animations",
+            "set-avatar": "set.avatar",
+            "set-sounds": "set.sounds",
+            "set-auto-scan": "set.auto_scan",
+            "set-checkpoint": "set.checkpoint",
+            "set-git": "set.git",
+        }[wid])
+
+    def on_mount(self) -> None:
+        self.query_one("#set-close", Button).label = self._t("modal.close")
+
+    def _persist(self, message: str) -> None:
+        self._save(self._cfg)
+        self._ui._refresh_pet()
+        if message:
+            self.notify(message, severity="information", timeout=2)
+
+    def on_select_changed(self, event) -> None:
+        wid = getattr(event.select, "id", "")
+        if wid == "set-lang":
+            self._cfg.language = event.value
+            self._persist(self._t("set.saved"))
+        elif wid == "set-mode":
+            self._cfg.mode = event.value
+            self._persist(self._t("set.saved"))
+        self._ui._refresh_header()
+
+    def on_input_submitted(self, event) -> None:
+        wid = getattr(event.input, "id", "")
+        raw = event.value.strip()
+        try:
+            val = int(raw)
+        except ValueError:
+            self.notify(self._t("fb.attempts_invalid"), severity="error")
+            return
+        if wid == "set-attempts":
+            self._cfg.attempts = max(0, min(val, self._cfg.max_attempts))
+        elif wid == "set-budget":
+            self._cfg.mutation_budget = max(0, val)
+        self._persist(self._t("set.saved"))
+
+    def on_switch_changed(self, event) -> None:
+        key = self.TOGGLE_KEYS.get(getattr(event.switch, "id", ""))
+        if key:
+            setattr(self._cfg, key, event.value)
+            self._persist(self._t("set.saved"))
+
+    def action_save_and_close(self) -> None:
+        self._save(self._cfg)
+        self._ui._refresh_pet()
+        self._ui._refresh_header()
         self.dismiss(None)
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "dm-close":
-            self.dismiss(None)
 
 
 class NixUI(App):
@@ -727,8 +722,9 @@ class NixUI(App):
 
     def _tick(self) -> None:
         self._spin = (self._spin + 1) % len(SPINNER)
-        self._blink = (self._blink + 1) % 4
-        self._refresh_pet(animate=True)
+        if self.nix.config.animations_enabled:
+            self._blink = (self._blink + 1) % 4
+            self._refresh_pet(animate=True)
 
     def _refresh_pet(self, animate: bool = False) -> None:
         pet = self.nix.pet or {}
@@ -745,7 +741,7 @@ class NixUI(App):
         pattern = pet.get("body_pattern", "seed")
         pattern_label = self._t(f"pet.pattern.{pattern}")
         blink = animate and self._blink == 1
-        art = pet_art(pattern, "compact", blink=blink)
+        art = render_avatar(pet, self.nix.root, scale=1, blink=blink)
         name = pet.get("name", "???")
         mood = pet.get("mood", "curious")
         mood_style = MOOD_STYLES.get(mood, FG)
@@ -798,166 +794,124 @@ class NixUI(App):
         )
 
     def show_help(self, lines: list[str]) -> None:
-        table = Table(
-            box=None,
-            expand=True,
-            pad_edge=False,
-        )
+        t = self._t
+        log = self._log()
+        log.write(Text(f"  {t('tbl.commands').upper()}", style=f"bold {BLUE}"))
+        body = Text()
         for line in lines:
             parts = line.strip().split(None, 1)
-            left = parts[0] if parts else line.strip()
-            right = parts[1] if len(parts) == 2 else ""
-            table.add_row(
-                Text(left, style=GREEN),
-                Text(right, style=FG),
-            )
-        self._open_modal(self._t("tbl.commands"), table)
-
-    def _open_modal(self, title: str, renderable) -> None:
-        self.push_screen(
-            DetailModal(title, renderable, self._t("modal.close"))
-        )
+            name = parts[0] if parts else line.strip()
+            desc = parts[1] if len(parts) == 2 else ""
+            body.append(f"    {name:<18}", style=GREEN)
+            body.append(desc + "\n", style=FG)
+        log.write(body)
 
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
                     functions: int, classes: int,
                     source_files: int, total_lines: int) -> None:
         t = self._t
-        table = Table(
-            title=t("tbl.project_status"),
-            header_style=f"bold {BLUE}",
-            border_style=BORDER,
-            expand=True,
-            pad_edge=False,
-        )
-        table.add_column(t("tbl.key"), style=GREEN, no_wrap=True)
-        table.add_column(t("tbl.value"), style=FG)
-        table.add_row(t("st.root"), root)
-        table.add_row(t("st.mode"), mode.upper())
-        table.add_row(t("st.attempts"), str(attempts))
-        table.add_row(t("st.files"), str(files))
-        table.add_row(t("st.dirs"), str(dirs))
-        table.add_row(t("st.source"), str(source_files))
-        table.add_row(t("st.functions"), str(functions))
-        table.add_row(t("st.classes"), str(classes))
-        table.add_row(t("st.lines"), f"{total_lines:,}")
-        self._open_modal(t("tbl.project_status"), table)
+        text = Text(f"  {t('tbl.project_status').upper()}\n",
+                    style=f"bold {BLUE}")
+        fields = [
+            (t("st.root"), root, FG),
+            (t("st.mode"), mode.upper(), BLUE),
+            (t("st.attempts"), f"{attempts}/{max_attempts}", FG),
+            (t("st.files"), str(files), GREEN),
+            (t("st.dirs"), str(dirs), GREEN),
+            (t("st.source"), str(source_files), GREEN),
+            (t("st.functions"), str(functions), GREEN),
+            (t("st.classes"), str(classes), GREEN),
+            (t("st.lines"), f"{total_lines:,}", GREEN),
+        ]
+        for label, value, color in fields:
+            text.append(f"    {label:<20}", style=CYAN)
+            text.append(value + "\n", style=color)
+        self._log().write(text)
 
     def show_scan(self, info: "ProjectInfo") -> None:
         t = self._t
-        header = Text()
-        header.append(f"{info.files} {t('scan.files')}  ", style=CYAN)
-        header.append(f"{info.directories} {t('scan.dirs')}  ", style=CYAN)
-        header.append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
-        header.append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
-        header.append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
-        header.append("\n")
-
+        log = self._log()
+        head = Text()
+        head.append(f"{info.files} {t('scan.files')}  ", style=CYAN)
+        head.append(f"{info.directories} {t('scan.dirs')}  ", style=CYAN)
+        head.append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
+        head.append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
+        head.append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
+        log.write(head)
         if info.extensions:
-            table = Table(
-                title=t("tbl.extensions"),
-                header_style=f"bold {PURPLE}",
-                border_style=BORDER,
-                expand=True,
-                pad_edge=False,
-            )
-            table.add_column(t("tbl.extension"), style=FG)
-            table.add_column(t("tbl.count"), justify="right", style=GREEN)
+            log.write(Text(f"  {t('tbl.extensions').upper()}",
+                           style=f"bold {PURPLE}"))
+            body = Text()
             for ext, count in info.top_extensions:
-                table.add_row(ext, str(count))
-            self._open_modal(t("tbl.scan"), Group(header, table))
-        else:
-            self._open_modal(t("tbl.scan"), header)
+                body.append(f"    {ext:<14}", style=FG)
+                body.append(str(count) + "\n", style=GREEN)
+            log.write(body)
 
     def show_pet(self, pet: dict) -> None:
+        t = self._t
         mood = pet.get("mood", "curious")
-        mood_label = self._t(f"mood.{mood}")
-        art = pet_art(pet.get("body_pattern", "seed"), "full",
-                      blink=self._blink == 1)
-        stat = Table(
-            title=self._t("tbl.pet", name=pet.get("name", "???")),
-            header_style=f"bold {PURPLE}",
-            border_style=BORDER,
-            expand=True,
-            pad_edge=False,
-        )
-        stat.add_column(self._t("tbl.attribute"), style=CYAN, no_wrap=True)
-        stat.add_column(self._t("tbl.value"), style=FG)
-        stat.add_row(self._t("pet.name"), str(pet.get("name", "???")))
-        stat.add_row(self._t("pet.mood"),
-                     f"[{MOOD_STYLES.get(mood, FG)}]{mood_label}[/]")
-        stat.add_row(self._t("pet.energy"), str(pet.get("energy", 100)))
-        stat.add_row(self._t("pet.age"), str(pet.get("age", 0)))
-        stat.add_row(self._t("pet.body"),
-                     self._t(f"pet.pattern.{pet.get('body_pattern', 'seed')}"))
-        stat.add_row(self._t("pet.stage"), str(pet.get("stage", 1)))
-        stat.add_row(self._t("pet.mutations"),
-                     str(pet.get("mutations_witnessed", 0)))
-        stat.add_row(self._t("pet.failures"),
-                     str(pet.get("failures_survived", 0)))
-        self._open_modal(self._t("tbl.pet", name=pet.get("name", "???")),
-                         Group(art, stat))
+        mood_label = t(f"mood.{mood}")
+        mood_style = MOOD_STYLES.get(mood, FG)
+        pattern = pet.get("body_pattern", "seed")
+        art = render_avatar(pet, self.nix.root, scale=2,
+                            blink=self._blink == 1)
+        text = Text()
+        rows = [
+            (t("pet.name"), pet.get("name", "???"), FG),
+            (t("pet.mood"), mood_label, mood_style),
+            (t("pet.energy"), str(pet.get("energy", 100)), GREEN),
+            (t("pet.age"), str(pet.get("age", 0)), FG),
+            (t("pet.body"), t(f"pet.pattern.{pattern}"), PURPLE),
+            (t("pet.stage"), str(pet.get("stage", 1)), FG),
+            (t("pet.mutations"), str(pet.get("mutations_witnessed", 0)), YELLOW),
+            (t("pet.failures"), str(pet.get("failures_survived", 0)), RED),
+            (t("pet.scans"), str(pet.get("scans", 0)), CYAN),
+        ]
+        for label, value, color in rows:
+            text.append(f"    {label:<20}", style=CYAN)
+            text.append(value + "\n", style=color)
+        log = self._log()
+        log.write(art)
+        log.write(text)
 
     def show_settings(self, config: "Config") -> None:
-        t = self._t
-        on, off = t("on"), t("off")
-        table = Table(
-            title=t("tbl.settings"),
-            header_style=f"bold {GREEN}",
-            border_style=BORDER,
-            expand=True,
-            pad_edge=False,
+        self.push_screen(
+            SettingsModal(self, config, self.nix.config_store.save)
         )
-        table.add_column(t("tbl.setting"), style=GREEN, no_wrap=True)
-        table.add_column(t("tbl.value"), style=FG)
-        table.add_row(t("set.language"), config.language)
-        table.add_row(t("set.theme"), config.theme)
-        table.add_row(t("st.mode"), config.mode)
-        table.add_row(t("set.attempts"),
-                      f"{config.attempts}/{config.max_attempts}")
-        table.add_row(t("set.mutation_budget"), str(config.mutation_budget))
-        table.add_row(t("set.tamagotchi"), on if config.tamagotchi_enabled else off)
-        table.add_row(t("set.animations"), on if config.animations_enabled else off)
-        table.add_row(t("set.avatar"), on if config.avatar_enabled else off)
-        table.add_row(t("set.sounds"), on if config.sounds_enabled else off)
-        table.add_row(t("set.auto_scan"), on if config.auto_scan else off)
-        table.add_row(t("set.checkpoint"),
-                      on if config.checkpoint_on_mutate else off)
-        table.add_row(t("set.git"), on if config.git_auto_commit else off)
-        table.add_row(t("set.protected"),
-                      ", ".join(config.protected_paths or []))
-        self._open_modal(t("tbl.settings"), table)
 
     def show_logs(self, path: object, lines: list[str]) -> None:
+        t = self._t
+        log = self._log()
         if not lines:
-            self._log().write(Text(self._t("fb.no_logs"), style=DIM))
+            log.write(Text(self._t("fb.no_logs"), style=DIM))
             return
-        log_text = Text()
-        for line in lines:
-            log_text.append(line + "\n", style=DIM)
-        self._open_modal(
-            self._t("tbl.session_log"),
-            Panel(log_text, border_style=BORDER),
-        )
+        log.write(Text(f"  {t('tbl.session_log').upper()}  {path}",
+                       style=f"bold {DIM}"))
+        body = Text()
+        for line in lines[-40:]:
+            body.append("    " + line + "\n", style=DIM)
+        log.write(body)
 
     def show_history(self, entries: list[dict]) -> None:
+        t = self._t
+        log = self._log()
         if not entries:
-            self._log().write(Text(self._t("fb.no_history"), style=DIM))
+            log.write(Text(self._t("fb.no_history"), style=DIM))
             return
-        table = Table(
-            title=self._t("tbl.journal"),
-            header_style=f"bold {BLUE}",
-            border_style=BORDER,
-            expand=True,
-            pad_edge=False,
-        )
-        table.add_column(self._t("tbl.time"), style=DIM)
-        table.add_column(self._t("tbl.kind"), style=GREEN)
-        table.add_column(self._t("tbl.message"), style=FG)
-        for entry in entries:
-            table.add_row(entry.get("ts", ""), entry.get("kind", ""),
-                          entry.get("message", ""))
-        self._open_modal(self._t("tbl.journal"), table)
+        log.write(Text(f"  {t('tbl.journal').upper()}",
+                       style=f"bold {BLUE}"))
+        kind_colors = {
+            "SYSTEM": DIM, "SCAN": CYAN, "PET": PURPLE, "ERROR": RED,
+        }
+        body = Text()
+        for entry in entries[-40:]:
+            kind = entry.get("kind", "")
+            body.append("    ", style=DIM)
+            body.append(f"{entry.get('ts', ''):<12} ", style=DIM)
+            body.append(f"{kind:<8}", style=kind_colors.get(kind, FG))
+            body.append(entry.get("message", "") + "\n", style=FG)
+        log.write(body)
 
     def show_error(self, text: str) -> None:
         self.show_message("ERROR", text)
