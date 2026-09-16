@@ -28,16 +28,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.quit": "Quit",
 
         # input
-        "cmd.placeholder": "Type /command, e.g. /help ...",
+        "cmd.placeholder": "Type a command, e.g. help ...",
 
         # session
         "session.started": "session started  root={root}",
         "session.foundation": "stage A foundation  ·  mutation engine disabled",
-        "session.hint": "type /help or press buttons below",
+        "session.hint": "type help or press buttons below",
         "pet.created": "pet created: {name}",
         "pet.no_pet": "no pet yet",
 
         # help/status/settings/logs/history
+        "help.grp.basic": "Basic",
+        "help.grp.safety": "Safety",
+        "help.grp.pet": "Pet",
+        "help.grp.info": "Info",
+        "help.grp.system": "System",
         "tbl.commands": "Commands",
         "tbl.command": "Command",
         "tbl.description": "Description",
@@ -82,9 +87,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.pattern.seed": "Seed",
         "pet.pattern.sprout": "Sprout",
         "pet.pattern.bloom": "Bloom",
-        "pet.pattern.seed": "Seed",
-        "pet.pattern.sprout": "Sprout",
-        "pet.pattern.bloom": "Bloom",
+        "pet.pattern.mystic": "Mystic",
         "pet.mutations": "Mutations",
         "pet.failures": "Failures",
 
@@ -119,7 +122,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cmd.attempts.desc": "show/set attempt budget",
         "cmd.pet.desc": "show pet status",
         "cmd.mode.desc": "show safety mode",
-        "cmd.settings.desc": "current settings",
+        "cmd.settings.desc": "open settings",
         "cmd.logs.desc": "show session log",
         "cmd.history.desc": "show journal history",
         "cmd.clear.desc": "clear the event log",
@@ -134,12 +137,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # feedback
         "fb.attempts": "attempts: {cur}/{max}",
         "fb.attempts_set": "attempts: {cur}/{max}",
-        "fb.attempts_invalid": "usage: /attempts N | /attempts +N | /attempts -N",
+        "fb.attempts_invalid": "usage: attempts N | attempts +N | attempts -N",
         "fb.mode": "mode: {mode}",
         "fb.mode_set": "mode set to: {mode}",
-        "fb.unknown": "Unknown command: /{name}. Type /help.",
-        "fb.not_command": "Commands must start with '/'. Type /help.",
-        "fb.failed": "/{name} failed: {exc}",
+        "fb.unknown": "Unknown command: {name}. Type help.",
+        "fb.failed": "{name} failed: {exc}",
         "fb.version": "NIX v{version}",
         "fb.no_logs": "no log entries yet",
         "fb.no_history": "no journal entries today",
@@ -180,16 +182,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.quit": "Выход",
 
         # input
-        "cmd.placeholder": "Введите /команду, напр. /help ...",
+        "cmd.placeholder": "Введите команду, напр. help ...",
 
         # session
         "session.started": "сессия начата  root={root}",
         "session.foundation": "фундамент этапа A · движок мутаций выключен",
-        "session.hint": "наберите /help или нажмите кнопки ниже",
+        "session.hint": "наберите help или нажмите кнопки ниже",
         "pet.created": "питомец создан: {name}",
         "pet.no_pet": "питомца ещё нет",
 
         # help/status/settings/logs/history
+        "help.grp.basic": "Основное",
+        "help.grp.safety": "Безопасность",
+        "help.grp.pet": "Питомец",
+        "help.grp.info": "Инфо",
+        "help.grp.system": "Система",
         "tbl.commands": "Команды",
         "tbl.command": "Команда",
         "tbl.description": "Описание",
@@ -234,6 +241,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pet.pattern.seed": "Семечко",
         "pet.pattern.sprout": "Росток",
         "pet.pattern.bloom": "Цветение",
+        "pet.pattern.mystic": "Мистик",
         "pet.mutations": "Мутации",
         "pet.failures": "Провалы",
 
@@ -268,7 +276,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cmd.attempts.desc": "показать/установить бюджет попыток",
         "cmd.pet.desc": "состояние питомца",
         "cmd.mode.desc": "показать режим безопасности",
-        "cmd.settings.desc": "текущие настройки",
+        "cmd.settings.desc": "открыть настройки",
         "cmd.logs.desc": "показать журнал сессии",
         "cmd.history.desc": "показать историю журнала",
         "cmd.clear.desc": "очистить лог событий",
@@ -283,12 +291,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # feedback
         "fb.attempts": "попытки: {cur}/{max}",
         "fb.attempts_set": "попытки: {cur}/{max}",
-        "fb.attempts_invalid": "использование: /attempts N | /attempts +N | /attempts -N",
+        "fb.attempts_invalid": "использование: attempts N | attempts +N | attempts -N",
         "fb.mode": "режим: {mode}",
         "fb.mode_set": "режим установлен: {mode}",
-        "fb.unknown": "Неизвестная команда: /{name}. Наберите /help.",
-        "fb.not_command": "Команды должны начинаться с '/'. Наберите /help.",
-        "fb.failed": "/{name} не сработала: {exc}",
+        "fb.unknown": "Неизвестная команда: {name}. Наберите help.",
+        "fb.failed": "{name} не сработала: {exc}",
         "fb.version": "NIX v{version}",
         "fb.no_logs": "записей журнала ещё нет",
         "fb.no_history": "сегодня записей журнала нет",

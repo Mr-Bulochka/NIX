@@ -47,18 +47,30 @@ def get_all_commands() -> dict[str, Command]:
     return dict(COMMANDS)
 
 
-@register("help", "show help", "/help")
+@register("help", "show help", "help")
 def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
-    lines = []
-    for name, cmd in sorted(COMMANDS.items()):
-        usage = cmd.usage or f"/{name}"
-        desc = app.t(f"cmd.{name}.desc")
-        lines.append(f"  {usage:<28} {desc}")
-    app.ui.show_help(lines)
+    groups = []
+    for title, names in (
+        (app.t("help.grp.basic"), ["help", "scan", "status"]),
+        (app.t("help.grp.safety"), ["mode", "attempts"]),
+        (app.t("help.grp.pet"), ["pet", "settings"]),
+        (app.t("help.grp.info"), ["logs", "history", "version", "pwd"]),
+        (app.t("help.grp.system"), ["clear", "quit"]),
+    ):
+        items = []
+        for name in names:
+            cmd = get_command(name)
+            if cmd is None:
+                continue
+            usage = cmd.usage or name
+            items.append((usage, app.t(f"cmd.{name}.desc")))
+        if items:
+            groups.append((title, items))
+    app.ui.show_help(groups)
     return CommandResult()
 
 
-@register("status", "current project and NIX state", "/status")
+@register("status", "current project and NIX state", "status")
 def cmd_status(app: "NixApp", args: list[str]) -> CommandResult:
     from .scanner import scan_project
     info = scan_project(app.root)
@@ -77,7 +89,7 @@ def cmd_status(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("scan", "read-only project inventory", "/scan")
+@register("scan", "read-only project inventory", "scan")
 def cmd_scan(app: "NixApp", args: list[str]) -> CommandResult:
     from .scanner import scan_project
     info = scan_project(app.root)
@@ -90,7 +102,7 @@ def cmd_scan(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("attempts", "show/set attempt budget", "/attempts [N|+N|-N]")
+@register("attempts", "show/set attempt budget", "attempts [N|+N|-N]")
 def cmd_attempts(app: "NixApp", args: list[str]) -> CommandResult:
     if not args:
         app.ui.show_message("SYSTEM", app.t(
@@ -111,13 +123,13 @@ def cmd_attempts(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("pet", "show pet status", "/pet")
+@register("pet", "show pet status", "pet")
 def cmd_pet(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_pet(app.pet)
     return CommandResult()
 
 
-@register("mode", "show safety mode", "/mode [local|safe|git]")
+@register("mode", "show safety mode", "mode [local|safe|git]")
 def cmd_mode(app: "NixApp", args: list[str]) -> CommandResult:
     if not args:
         app.ui.show_message("SYSTEM", app.t("fb.mode", mode=app.config.mode))
@@ -135,13 +147,13 @@ def cmd_mode(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("settings", "show current settings", "/settings")
+@register("settings", "open settings", "settings")
 def cmd_settings(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_settings(app.config)
     return CommandResult()
 
 
-@register("logs", "show session log path or recent entries", "/logs [N]")
+@register("logs", "show session log path or recent entries", "logs [N]")
 def cmd_logs(app: "NixApp", args: list[str]) -> CommandResult:
     if args:
         try:
@@ -155,7 +167,7 @@ def cmd_logs(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("history", "show journal history", "/history [N]")
+@register("history", "show journal history", "history [N]")
 def cmd_history(app: "NixApp", args: list[str]) -> CommandResult:
     n = 30
     if args:
@@ -168,27 +180,27 @@ def cmd_history(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("clear", "clear the event log", "/clear")
+@register("clear", "clear the event log", "clear")
 def cmd_clear(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.clear_log()
     return CommandResult()
 
 
-@register("quit", "exit NIX", "/quit")
+@register("quit", "exit NIX", "quit")
 def cmd_quit(app: "NixApp", args: list[str]) -> CommandResult:
     app.journal.write("SYSTEM", "session ended by user")
     app.session_logger.write("SYSTEM", "session ended by user")
     return CommandResult(continue_session=False)
 
 
-@register("version", "show NIX version", "/version")
+@register("version", "show NIX version", "version")
 def cmd_version(app: "NixApp", args: list[str]) -> CommandResult:
     from . import __version__
     app.ui.show_message("SYSTEM", app.t("fb.version", version=__version__))
     return CommandResult()
 
 
-@register("pwd", "show current working directory", "/pwd")
+@register("pwd", "show current working directory", "pwd")
 def cmd_pwd(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_message("SYSTEM", str(app.root))
     app.journal.write("SYSTEM", f"pwd queried: {app.root}")

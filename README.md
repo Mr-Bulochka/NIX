@@ -34,22 +34,22 @@ NIX runs as a full-screen terminal application (built on [Textual](https://githu
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show all commands |
-| `/status` | Current project and NIX state |
-| `/scan` | Read-only project inventory |
-| `/attempts` | Show attempt budget |
-| `/attempts N` | Set attempt budget |
-| `/attempts +N` | Add attempts |
-| `/attempts -N` | Remove attempts |
-| `/pet` | Show pet status |
-| `/mode [local\|safe\|git]` | Show/set safety mode |
-| `/pwd` | Show current working directory |
-| `/settings` | Current settings |
-| `/logs [N]` | Show session log |
-| `/history [N]` | Show journal history |
-| `/clear` | Clear the event log |
-| `/version` | Show NIX version |
-| `/quit` | Exit NIX |
+| `help` | Show all commands |
+| `status` | Current project and NIX state |
+| `scan` | Read-only project inventory |
+| `attempts` | Show attempt budget |
+| `attempts N` | Set attempt budget |
+| `attempts +N` | Add attempts |
+| `attempts -N` | Remove attempts |
+| `pet` | Show pet status |
+| `mode [local\|safe\|git]` | Show/set safety mode |
+| `pwd` | Show current working directory |
+| `settings` | Open settings |
+| `logs [N]` | Show session log |
+| `history [N]` | Show journal history |
+| `clear` | Clear the event log |
+| `version` | Show NIX version |
+| `quit` | Exit NIX |
 
 ## `.nix/` Structure
 

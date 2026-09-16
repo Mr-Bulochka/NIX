@@ -99,10 +99,10 @@ Screen {{
     height: auto;
 }}
 
-#pet-name-label {{
+#top-pet-name {{
     content-align: center middle;
-    color: {FG};
     text-style: bold;
+    color: {CYAN};
     margin-top: 0;
 }}
 
@@ -159,6 +159,13 @@ Screen {{
     background: {RAISED};
 }}
 
+#btn-help {{ color: {BLUE}; }}
+#btn-scan {{ color: {CYAN}; }}
+#btn-status {{ color: {GREEN}; }}
+#btn-pet {{ color: {PURPLE}; }}
+#btn-settings {{ color: {YELLOW}; }}
+#btn-quit {{ color: {RED}; }}
+
 #cmd {{
     dock: bottom;
     height: 3;
@@ -209,8 +216,6 @@ Scrollbar:hover {{
     background: {RAISED};
     color: {BLUE};
 }}
-
-#top-scrollbar-hack {{ }}
 """
 
 
@@ -621,21 +626,26 @@ class NixUI(App):
         self.set_interval(1.0, self._tick)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        if getattr(event.input, "id", "") != "cmd":
+            return
         raw = event.value.strip()
         if not raw:
             return
+        cmd_input = self.query_one("#cmd", Input)
+        cmd_input.value = ""
         if not self.nix.handle_command(raw):
             self.exit(0)
         self._refresh_header()
+        self._focus_cmd()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         mapping = {
-            "btn-scan": "/scan",
-            "btn-status": "/status",
-            "btn-pet": "/pet",
-            "btn-settings": "/settings",
-            "btn-help": "/help",
-            "btn-quit": "/quit",
+            "btn-scan": "scan",
+            "btn-status": "status",
+            "btn-pet": "pet",
+            "btn-settings": "settings",
+            "btn-help": "help",
+            "btn-quit": "quit",
         }
         action = mapping.get(event.button.id)
         if not action:
@@ -643,6 +653,8 @@ class NixUI(App):
         if not self.nix.handle_command(action):
             self.exit(0)
         self._refresh_header()
+        if action != "settings":
+            self._focus_cmd()
 
     # ----- actions ---------------------------------------------------
 
@@ -651,18 +663,27 @@ class NixUI(App):
 
     def action_clear_log(self) -> None:
         self._log().clear()
+        self._focus_cmd()
 
     def action_run_scan(self) -> None:
-        self.nix.handle_command("/scan")
+        self.nix.handle_command("scan")
         self._refresh_header()
+        self._focus_cmd()
 
     def action_run_pet(self) -> None:
-        self.nix.handle_command("/pet")
+        self.nix.handle_command("pet")
+        self._focus_cmd()
 
     # ----- internal --------------------------------------------------
 
     def _log(self) -> RichLog:
         return self.query_one("#log", RichLog)
+
+    def _focus_cmd(self) -> None:
+        try:
+            self.query_one("#cmd", Input).focus()
+        except Exception:
+            pass
 
     def _t(self, key: str, **kw) -> str:
         return self.nix.config.t(key, **kw)
@@ -732,7 +753,7 @@ class NixUI(App):
         name_label = self.query_one("#top-pet-name", Label)
         if not pet:
             box.update(Text(self._t("pet.no_pet"), style=DIM))
-            name_label.update("")
+            name_label.update(Text())
             self._set_stat("#st-mood", "", DIM)
             self._set_stat("#st-energy", "", DIM)
             self._set_stat("#st-stage", "", DIM)
@@ -749,7 +770,11 @@ class NixUI(App):
         energy = int(pet.get("energy", 100))
         age = int(pet.get("age", 0))
 
-        name_label.update(name)
+        decorated = Text()
+        decorated.append("  \u2726  ", style=DIM)
+        decorated.append(name, style=f"bold {BLUE}")
+        decorated.append("  \u2726  ", style=DIM)
+        name_label.update(decorated)
 
         self._set_stat("#st-mood",
                        f"{self._t('pet.mood')}: [{mood_style}]{mood_label}[/]",
@@ -793,18 +818,18 @@ class NixUI(App):
             .append(text, style=FG)
         )
 
-    def show_help(self, lines: list[str]) -> None:
+    def show_help(self, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
         t = self._t
         log = self._log()
-        log.write(Text(f"  {t('tbl.commands').upper()}", style=f"bold {BLUE}"))
-        body = Text()
-        for line in lines:
-            parts = line.strip().split(None, 1)
-            name = parts[0] if parts else line.strip()
-            desc = parts[1] if len(parts) == 2 else ""
-            body.append(f"    {name:<18}", style=GREEN)
-            body.append(desc + "\n", style=FG)
-        log.write(body)
+        log.write(Text(f"  {t('tbl.commands').upper()}\n",
+                       style=f"bold {BLUE}"))
+        for title, items in groups:
+            log.write(Text("    " + title, style=f"bold {PURPLE}"))
+            body = Text()
+            for usage, desc in items:
+                body.append("      " + usage.ljust(22), style=GREEN)
+                body.append(desc + "\n", style=FG)
+            log.write(body)
 
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
@@ -877,7 +902,8 @@ class NixUI(App):
 
     def show_settings(self, config: "Config") -> None:
         self.push_screen(
-            SettingsModal(self, config, self.nix.config_store.save)
+            SettingsModal(self, config, self.nix.config_store.save),
+            callback=lambda _: self._focus_cmd(),
         )
 
     def show_logs(self, path: object, lines: list[str]) -> None:

@@ -76,12 +76,53 @@ class TestTUI(unittest.TestCase):
                 from textual.widgets import Input
                 cmd = pilot.app.query_one("#cmd", Input)
                 cmd.focus()
-                cmd.value = "/attempts +5"
+                cmd.value = "attempts +5"
                 await pilot.press("enter")
                 await pilot.pause()
                 assert self.app.config.attempts == 5
+                assert cmd.value == ""
+                assert cmd.has_focus
                 await pilot.click("#btn-quit")
                 await pilot.pause()
+        self._run(scenario())
+
+    def test_command_without_slash_and_focus_stays(self):
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                from textual.widgets import Input
+                cmd = pilot.app.query_one("#cmd", Input)
+                cmd.value = "pet"
+                await pilot.press("enter")
+                await pilot.pause()
+                assert cmd.value == ""
+                assert cmd.has_focus
+        self._run(scenario())
+
+    def test_first_launch_does_not_leak_name_into_cmd(self):
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            calls = []
+            orig = self.app.handle_command
+
+            def spy(raw):
+                calls.append(raw)
+                return orig(raw)
+
+            self.app.handle_command = spy
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause(0.5)
+                assert self.app.pet is not None
+                assert calls == []
         self._run(scenario())
 
 

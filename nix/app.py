@@ -42,11 +42,8 @@ class NixApp:
 
         self.session_logger.write("COMMAND", raw)
 
-        if not raw.startswith("/"):
-            self.ui.show_message("SYSTEM", self.t("fb.not_command"))
-            return True
-
-        parts = raw[1:].split()
+        text = raw[1:] if raw.startswith("/") else raw
+        parts = text.split()
         if not parts:
             return True
 

@@ -16,10 +16,6 @@ PALETTES = {
         "hi": "#8fd6ff", "lo": "#3a7bd6", "belly": "#dff2ff",
         "cheek": "#ffc2c2", "accent": "#ffffff", "outline": "#1f5a8a",
     },
-    "peach": {
-        "hi": "#ffc98f", "lo": "#e07a4f", "belly": "#fff0e0",
-        "cheek": "#ff9090", "accent": "#ffe9c7", "outline": "#8a4a2f",
-    },
     "grape": {
         "hi": "#c9a6ff", "lo": "#7c4fd0", "belly": "#efe2ff",
         "cheek": "#ffb3d6", "accent": "#ffe4ff", "outline": "#4a2f7a",
@@ -28,18 +24,48 @@ PALETTES = {
         "hi": "#ffb3d9", "lo": "#d654a6", "belly": "#ffe4f2",
         "cheek": "#ff8a8a", "accent": "#fff0f7", "outline": "#7a2f5a",
     },
-    "honey": {
-        "hi": "#ffd98a", "lo": "#d69a3a", "belly": "#fff7e0",
-        "cheek": "#ff9b7a", "accent": "#fff3d0", "outline": "#8a6520",
-    },
     "slate": {
         "hi": "#b9c4d9", "lo": "#5a6b8f", "belly": "#e8eef7",
         "cheek": "#ffb3b3", "accent": "#cfe4ff", "outline": "#3a4660",
     },
-    "coral": {
-        "hi": "#ffabab", "lo": "#c05656", "belly": "#ffe6e0",
-        "cheek": "#ff8a8a", "accent": "#ffe0d0", "outline": "#7a2f2f",
+    "acid": {
+        "hi": "#c9f56f", "lo": "#6aa520", "belly": "#e9ffb8",
+        "cheek": "#ffb3b3", "accent": "#f6ffd0", "outline": "#3d6b12",
     },
+    "pink": {
+        "hi": "#ffc2e6", "lo": "#d65fa8", "belly": "#ffe9f6",
+        "cheek": "#ff8ab4", "accent": "#fff0fa", "outline": "#7a2f5e",
+    },
+    "slime": {
+        "hi": "#7fe8d9", "lo": "#2a9c8f", "belly": "#d0fbf3",
+        "cheek": "#ffb3a6", "accent": "#e6fffb", "outline": "#176a60",
+    },
+}
+
+# --- easter-egg / signature palettes -------------------------------
+
+# The Orange Octopus - a nod to Claude Code's mascot.
+OCTOPUS_PAL = {
+    "hi": "#ffad5c", "lo": "#e0551c", "belly": "#ffe3b8",
+    "cheek": "#ff7f4f", "accent": "#fff3d6", "outline": "#8a2b06",
+}
+
+# A cheerful orange one-eyed alien.
+CYCLOPS_PAL = {
+    "hi": "#ffb84d", "lo": "#e86f1f", "belly": "#ffe8ad",
+    "cheek": "#ff7f4f", "accent": "#fff3c9", "outline": "#8a4506",
+}
+
+# Pou - the beige "piece of dough" virtual pet with stretched eyes.
+POU_PAL = {
+    "hi": "#e0b386", "lo": "#a97a45", "belly": "#f5e3c0",
+    "cheek": "#ff9b7a", "accent": "#fff3d0", "outline": "#6b4a1f",
+}
+
+# My Pet Alien (Tommy) - warm brown round alien with big white eyes.
+TOMMY_PAL = {
+    "hi": "#d99a63", "lo": "#96602e", "belly": "#f2d6b2",
+    "cheek": "#ff8a6b", "accent": "#ffe9c8", "outline": "#5e3a18",
 }
 
 EYES = {
@@ -48,10 +74,187 @@ EYES = {
     "blue": "#274b68",
 }
 
-EARS = ["round", "cat", "bunny", "antenna", "none"]
-PATTERNS = ["none", "dots", "stripe", "heart", "star"]
-
 W, H = 12, 16
+EMPTY = "............"
+
+# Hand-drawn 12x16 pixel masks.  '#' = body, 'b' = belly, '.' = empty.
+
+# Orange octopus. Claude Code's mascot came home.
+OCTOPUS = [
+    "............",
+    "............",
+    "..########..",
+    ".##########.",
+    "############",
+    "############",
+    "############",
+    "############",
+    "############",
+    ".##########.",
+    ".##########.",
+    "..########..",
+    "....####....",
+    "..##..##..##",
+    "..##..##..##",
+    "..##..##..##",
+]
+
+# A round orange alien with a single big eye.
+CYCLOPS = [
+    "............",
+    "............",
+    "...######...",
+    "..########..",
+    ".##########.",
+    "############",
+    "############",
+    "############",
+    "############",
+    "############",
+    ".##########.",
+    "..########..",
+    "....####....",
+    "............",
+    "............",
+    "............",
+]
+
+# Pou: a beige blob, a piece of dough with small stretched eyes.
+POU = [
+    "............",
+    "............",
+    ".....##.....",
+    "....###.....",
+    "...#####....",
+    "..#######...",
+    ".#########..",
+    "############",
+    "############",
+    "############",
+    "############",
+    "############",
+    ".#########..",
+    "..#######...",
+    "............",
+    "............",
+]
+
+# My Pet Alien (Tommy): round brown head, big white eyes.
+TOMMY = [
+    "............",
+    "............",
+    "....####....",
+    "...######...",
+    "..########..",
+    ".##########.",
+    "############",
+    "############",
+    "############",
+    "############",
+    ".##########.",
+    ".##########.",
+    "..########..",
+    "...####.....",
+    "............",
+    "............",
+]
+
+# A wavy-bottomed slime with two goofy eyes.
+SLIME = [
+    "............",
+    "............",
+    "...######...",
+    "..########..",
+    ".##########.",
+    "############",
+    "############",
+    "############",
+    "############",
+    "..########..",
+    ".####..####.",
+    ".##......##.",
+    ".##......##.",
+    "............",
+    "............",
+    "............",
+]
+
+# A green alien with two antennae sticking up.
+ANTENNA = [
+    "..#......#..",
+    "...#....#...",
+    "..###..###..",
+    "..##....##..",
+    ".##########.",
+    "############",
+    "############",
+    "############",
+    ".####..####.",
+    ".##########.",
+    "..########..",
+    "...######...",
+    "...######...",
+    "............",
+    "............",
+    "............",
+]
+
+# A strangely conical alien.
+CONE = [
+    "............",
+    "............",
+    ".....##.....",
+    ".....###....",
+    "....#####...",
+    "...#######..",
+    "..#########.",
+    ".##########.",
+    ".##########.",
+    ".####..####.",
+    ".##########.",
+    "..########..",
+    "...######...",
+    "............",
+    "............",
+    "............",
+]
+
+# A weird floating pancake-creature with little legs.
+LEGGY = [
+    "...######...",
+    "..########..",
+    ".##########.",
+    ".##########.",
+    "############",
+    ".##########.",
+    ".##########.",
+    "..########..",
+    "..####..####",
+    "..##..##..##",
+    "..##..##..##",
+    "............",
+    "............",
+    "............",
+    "............",
+    "............",
+]
+
+VARIANTS = [
+    {"kind": "octopus", "grid": OCTOPUS, "face_y": 6, "mouth_y": 9,
+     "palette": OCTOPUS_PAL},
+    {"kind": "cyclops", "grid": CYCLOPS, "face_y": 5, "mouth_y": 9,
+     "palette": CYCLOPS_PAL, "single_eye": True},
+    {"kind": "pou", "grid": POU, "face_y": 7, "mouth_y": 10,
+     "palette": POU_PAL, "pou_eyes": True},
+    {"kind": "tommy", "grid": TOMMY, "face_y": 5, "mouth_y": 9,
+     "palette": TOMMY_PAL},
+    {"kind": "slime", "grid": SLIME, "face_y": 5, "mouth_y": 8},
+    {"kind": "antenna", "grid": ANTENNA, "face_y": 5, "mouth_y": 8},
+    {"kind": "cone", "grid": CONE, "face_y": 6, "mouth_y": 9},
+    {"kind": "leggy", "grid": LEGGY, "face_y": 3, "mouth_y": 7},
+]
+
+VARIANT_KINDS = [v["kind"] for v in VARIANTS]
 
 
 def _lerp(a: str, b: str, t: float) -> str:
@@ -69,11 +272,17 @@ def genes_for(root, pet: dict) -> dict:
     r = random.Random(h)
     return {
         "palette": r.choice(list(PALETTES)),
-        "ear": r.choice(EARS),
-        "pattern": r.choice(PATTERNS),
+        "variant": r.choice(VARIANTS)["kind"],
         "eye": r.choice(list(EYES)),
         "seed": seed,
     }
+
+
+def _variant(kind: str) -> dict:
+    for v in VARIANTS:
+        if v["kind"] == kind:
+            return v
+    return VARIANTS[0]
 
 
 def mutation_count(pet: dict) -> int:
@@ -83,154 +292,140 @@ def mutation_count(pet: dict) -> int:
     )
 
 
-def _body_matrix(genes: dict, stage: str, mood: str, mutations: int):
-    pal = PALETTES[genes["palette"]]
+def _body_matrix(vm: dict, palette: dict, stage: str):
     m = [["."] * W for _ in range(H)]
+    grid = vm["grid"]
 
-    def body_color(y, x):
-        t = (y - 2.5) / 13.0
-        return _lerp(pal["hi"], pal["lo"], t)
+    def inside(x, y) -> bool:
+        return 0 <= x < W and 0 <= y < H and grid[y][x] != "."
 
-    cx, cy, rx, ry = 5.5, 9.5, 5.0, 6.2
     for y in range(H):
+        row = grid[y] if len(grid) > y else EMPTY
         for x in range(W):
-            dx = (x - cx) / rx
-            dy = (y - cy) / ry
-            inside = dx * dx + dy * dy <= 1.0
-            if not inside:
+            ch = row[x]
+            if ch == ".":
                 continue
-            edge = False
-            for n in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                nx, ny = n
-                nxd = (nx - cx) / rx
-                nyd = (ny - cy) / ry
-                if not (nxd * nxd + nyd * nyd <= 1.0):
-                    edge = True
-                    break
-            m[y][x] = pal["outline"] if edge else body_color(y, x)
+            edge = not (
+                inside(x - 1, y)
+                and inside(x + 1, y)
+                and inside(x, y - 1)
+                and inside(x, y + 1)
+            )
+            if ch == "b":
+                m[y][x] = palette["outline"] if edge else palette["belly"]
+            else:
+                if edge:
+                    m[y][x] = palette["outline"]
+                else:
+                    t = (y - 2.5) / 13.0
+                    m[y][x] = _lerp(palette["hi"], palette["lo"], t)
 
     def paint(x, y, color):
         if 0 <= x < W and 0 <= y < H:
             m[y][x] = color
 
-    # ears
-    ear = genes["ear"]
-    if ear in ("round", "cat", "bunny", "antenna"):
-        ear_col = _lerp(pal["hi"], pal["lo"], 0.28)
-        if ear == "round":
-            for off in (0, 1):
-                for y in (2, 3):
-                    paint(2 + off, y, ear_col)
-                    paint(9 + off, y, ear_col)
-        elif ear == "cat":
-            for y in (2, 3, 4):
-                paint(1, y, ear_col)
-                paint(10, y, ear_col)
-            paint(2, 2, ear_col)
-            paint(9, 2, ear_col)
-        elif ear == "bunny":
-            for y in (1, 2, 3, 4):
-                paint(3, y, ear_col)
-                paint(8, y, ear_col)
-            paint(2, 1, ear_col)
-            paint(9, 1, ear_col)
-        elif ear == "antenna":
-            for x in (5, 6):
-                paint(x, 2, ear_col)
-            paint(5, 0, pal["accent"])
-            paint(6, 1, pal["accent"])
-
-    # belly
-    bx, by, brx, bry = 5.5, 11.6, 2.6, 2.0
-    for y in range(H):
-        for x in range(W):
-            if abs((x - bx) / brx) ** 2 + abs((y - by) / bry) ** 2 <= 1.0:
-                m[y][x] = pal["belly"]
-
-    # pattern
-    pat = genes["pattern"]
-    accent = pal["accent"]
-    if pat == "dots":
-        paint(2, 10, accent); paint(6, 12, accent); paint(9, 10, accent)
-    elif pat == "stripe":
-        paint(6, 8, accent); paint(6, 9, accent); paint(7, 10, accent)
-    elif pat == "heart":
-        paint(3, 10, accent); paint(4, 10, accent)
-        paint(3, 11, accent); paint(4, 11, accent)
-    elif pat == "star":
-        for x in (5, 6):
-            paint(x, 3, accent)
-        paint(5, 2, accent); paint(6, 2, accent)
-
-    # mutation traits
-    if mutations >= 1:
-        paint(5, 1, "#ffd166")
-        paint(6, 1, "#ffd166")
-    if mutations >= 2:
-        paint(5, 0, "#ffd166")
-    if mutations >= 3:
-        paint(0, 8, "#aef3ff")
-        paint(11, 8, "#aef3ff")
-
-    # stage accessory
+    # stage accessory (floating above the head)
     if stage == "sprout":
-        paint(5, 3, "#4ade80"); paint(6, 3, "#4ade80")
+        paint(5, 1, "#6ce0a0")
+        paint(6, 1, "#4ade80")
     elif stage == "bloom":
-        paint(6, 3, "#ffd166")
-        paint(4, 3, "#ff9db4"); paint(7, 3, "#ff9db4")
-        paint(5, 2, "#ffd166"); paint(6, 2, "#b39df0")
+        paint(5, 0, "#ffd166")
+        paint(5, 1, "#ff9db4")
+        paint(6, 0, "#ff9db4")
+        paint(6, 1, "#ffd166")
     elif stage == "mystic":
         for x in range(4, 8):
-            paint(x, 2, "#ffd166")
-        paint(4, 1, "#aef3ff"); paint(7, 1, "#aef3ff")
-        paint(0, 11, "#aef3ff"); paint(11, 11, "#aef3ff")
+            paint(x, 0, "#ffd166")
+        paint(4, 1, "#aef3ff")
+        paint(7, 1, "#aef3ff")
     return m
 
 
-def _face(m, genes: dict, pal: dict, mood: str, blink: bool):
+def _face(m, vm: dict, genes: dict, pal: dict, mood: str, blink: bool):
     eye = EYES[genes["eye"]]
     glint = "#ffffff"
+    face_y, mouth_y = vm["face_y"], vm["mouth_y"]
+    cheeks_y = mouth_y - 1
 
     def paint(x, y, color):
         if 0 <= x < W and 0 <= y < H:
             m[y][x] = color
 
-    eye_top = 6
+    if vm.get("single_eye"):
+        # one big cyclops eye
+        if blink or mood in ("tired", "sleepy"):
+            for x in range(4, 8):
+                paint(x, face_y + 1, eye)
+        else:
+            for x in range(4, 8):
+                paint(x, face_y, eye)
+                paint(x, face_y + 1, eye)
+            paint(5, face_y, glint)
+            paint(6, face_y, glint)
+        paint(2, cheeks_y, pal["cheek"])
+        paint(9, cheeks_y, pal["cheek"])
+        for x in (5, 6):
+            paint(x, mouth_y, pal["outline"])
+        return
+
+    if vm.get("pou_eyes"):
+        # Pou's small stretched eyes, like a piece of dough
+        if blink or mood in ("tired", "sleepy"):
+            for x in (3, 4):
+                paint(x, face_y + 1, eye)
+            for x in (8, 9):
+                paint(x, face_y + 1, eye)
+        else:
+            for yy in range(2):
+                for x in (3, 4):
+                    paint(x, face_y + yy, eye)
+                for x in (8, 9):
+                    paint(x, face_y + yy, eye)
+            paint(3, face_y, glint)
+            paint(9, face_y, glint)
+        paint(1, cheeks_y, pal["cheek"])
+        paint(10, cheeks_y, pal["cheek"])
+        for x in (5, 6):
+            paint(x, mouth_y, pal["outline"])
+        return
+
     if blink or mood in ("tired", "sleepy"):
         for x in (3, 4):
-            paint(x, eye_top + 1, eye)
+            paint(x, face_y + 1, eye)
         for x in (8, 9):
-            paint(x, eye_top + 1, eye)
+            paint(x, face_y + 1, eye)
     elif mood in ("alert", "focused"):
-        for x, g in ((3, 4), (8, 9)):
-            paint(x, eye_top, eye)
-        paint(3, eye_top, glint)
-        paint(8, eye_top, glint)
+        for x in (3, 4):
+            paint(x, face_y, eye)
+            paint(x, face_y, glint)
+        for x in (8, 9):
+            paint(x, face_y, eye)
+            paint(x, face_y, glint)
     else:
-        paint(3, eye_top, eye); paint(4, eye_top, eye)
-        paint(8, eye_top, eye); paint(9, eye_top, eye)
-        paint(3, eye_top, glint)
-        paint(8, eye_top, glint)
+        paint(3, face_y, eye); paint(4, face_y, eye)
+        paint(8, face_y, eye); paint(9, face_y, eye)
+        paint(3, face_y, glint)
+        paint(8, face_y, glint)
 
-    paint(1, 8, pal["cheek"])
-    paint(10, 8, pal["cheek"])
+    paint(1, cheeks_y, pal["cheek"])
+    paint(10, cheeks_y, pal["cheek"])
 
     mouth = {
-        "happy": [(3, 9), (4, 9), (5, 9), (6, 9), (7, 9), (8, 9)],
-        "content": [(5, 9), (6, 9)],
-        "focused": [(4, 9), (5, 9), (6, 9), (7, 9)],
-        "alert": [(4, 9), (5, 9), (6, 9), (7, 9)],
-        "determined": [(4, 9), (5, 9), (6, 9)],
-        "thoughtful": [(4, 9), (5, 9), (6, 9)],
-        "curious": [(4, 9), (5, 9), (6, 9)],
-        "cautious": [(5, 9), (6, 9)],
-        "worried": [(5, 9), (6, 9)],
-        "anxious": [(5, 9), (6, 9)],
-        "relieved": [(5, 9), (6, 9)],
-        "tired": [(5, 9)],
-    }[mood]
-    for x, y in mouth:
-        paint(x, y, pal["outline"])
+        "happy": [3, 4, 5, 6, 7, 8],
+        "content": [5, 6],
+        "focused": [4, 5, 6, 7],
+        "alert": [4, 5, 6, 7],
+        "determined": [4, 5, 6],
+        "thoughtful": [4, 5, 6],
+        "curious": [4, 5, 6],
+        "cautious": [5, 6],
+        "worried": [5, 6],
+        "anxious": [5, 6],
+        "relieved": [5, 6],
+        "tired": [5],
+    }.get(mood, [5, 6])
+    for x in mouth:
+        paint(x, mouth_y, pal["outline"])
 
 
 def _to_text(m, scale: int) -> Text:
@@ -269,7 +464,8 @@ def render(pet: dict, root, scale: int = 1, blink: bool = False) -> Text:
     if stage not in ("seed", "sprout", "bloom", "mystic"):
         stage = "seed"
     mood = pet.get("mood", "curious")
-    mutations = mutation_count(pet)
-    m = _body_matrix(genes, stage, mood, mutations)
-    _face(m, genes, PALETTES[genes["palette"]], mood, blink)
+    vm = _variant(genes["variant"])
+    palette = vm.get("palette") or PALETTES[genes["palette"]]
+    m = _body_matrix(vm, palette, stage)
+    _face(m, vm, genes, palette, mood, blink)
     return _to_text(m, scale)
