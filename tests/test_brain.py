@@ -64,6 +64,16 @@ class TestBrain(unittest.TestCase):
         self.assertTrue(brain.index_path.exists())
         self.assertTrue(brain.patterns_path.exists())
 
+    def test_utf8_bom_is_tolerated(self):
+        root, nix = self._make_project()
+        path = root / "api.py"
+        path.write_text("\ufeff" + path.read_text(encoding="utf-8"),
+                        encoding="utf-8")
+        brain = Brain(nix, root)
+        index = brain.build()
+        names = [s["name"] for s in index["symbols"]]
+        self.assertIn("fetch", names)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,7 +56,7 @@ class Brain:
             if mod is None:
                 continue
             try:
-                text = path.read_text(encoding="utf-8", errors="replace")
+                text = self._read_text(path)
             except OSError:
                 continue
             lines = text.splitlines()
@@ -117,7 +117,7 @@ class Brain:
             if mod is None:
                 continue
             try:
-                text = path.read_text(encoding="utf-8", errors="replace")
+                text = self._read_text(path)
             except OSError:
                 continue
             lines = text.splitlines()
@@ -172,6 +172,14 @@ class Brain:
         return self.load()
 
     # ---- helpers ------------------------------------------------------
+
+    @staticmethod
+    def _read_text(path: Path) -> str:
+        """Read source tolerating a UTF-8 BOM (common on Windows)."""
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if text.startswith("\ufeff"):
+            text = text[1:]
+        return text
 
     def _save_json(self, path: Path, data: dict) -> None:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=1),

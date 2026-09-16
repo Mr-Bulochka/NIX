@@ -101,6 +101,32 @@ generation work in a given language. Bundled modules live in
 | `remote fetch` / `pull` / `push` | Remote sync, dry-run unless `--apply` |
 | `remote pr` | List open PRs/MRs via `gh`/`glab`; `remote pr "title" --apply` opens one |
 
+### IDE daemon & protocol (Stage I)
+
+NIX runs headless without the TUI, so any IDE/editor can drive the same
+deterministic toolkit:
+
+```
+nix daemon                     # line protocol over stdin/stdout (JSON Lines)
+nix daemon --socket 127.0.0.1:7411
+nix daemon --once "status"     # one command, one JSON response
+```
+
+Each request is one line; each response is one JSON object:
+
+```
+> HELP
+{"ok": true, "session_end": false, "commands": [{"name": "defs", ...}]}
+> defs
+{"ok": true, "session_end": false, "events": [{"op": "block", "title": "Symbols", ...}]}
+> quit
+{"ok": true, "session_end": true}
+```
+
+Commands are the exact `COMMANDS` the TUI uses; events are ordered
+(`message`, `block`, `code`, `tree`, `pet`, `status`, `scan`, `logs`,
+`history`, `help`) and re-renderable by the client verbatim.
+
 Module layout:
 
 ```
@@ -160,4 +186,4 @@ python -m nix
 - **Stage F** — GitHub/GitLab Bridge
 - **Stage G** — Tamagotchi Evolution
 - **Stage H** — Full TUI polish
-- **Stage I** — IDE daemon + protocol (NIX as a language-agnostic senior multi-tool)
+- **Stage I** — IDE daemon + protocol (done: `nix daemon`, see above; plugins per-editor remain)
