@@ -85,6 +85,20 @@ class TestAvatar(unittest.TestCase):
             text = render(pet, Root(), scale=scale)
             self.assertIn("\u2580", text.plain)
 
+    def test_render_uses_skin_override(self):
+        class Root:
+            name = "proj"
+            def __str__(self):
+                return "proj"
+
+        base = {"name": "Test", "body_pattern": "seed", "mood": "curious"}
+        octo = dict(base, skin="octopus")
+        slime = dict(base, skin="slime")
+        self.assertNotEqual(render(octo, Root(), scale=1).plain,
+                            render(slime, Root(), scale=1).plain)
+        garbage = dict(base, skin="garbage")
+        render(garbage, Root(), scale=1)  # must not raise
+
 
 if __name__ == "__main__":
     unittest.main()

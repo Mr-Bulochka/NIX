@@ -125,6 +125,55 @@ class TestTUI(unittest.TestCase):
                 assert calls == []
         self._run(scenario())
 
+    def test_settings_close_button_works(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                await pilot.click("#set-close")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                cmd = pilot.app.query_one("#cmd", Input)
+                assert cmd.has_focus
+        self._run(scenario())
+
+    def test_settings_pill_button_and_skin(self):
+        from textual.widgets import Button, Input
+        from nix.avatar import VARIANT_KINDS
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert self.app.pet["skin"] is None
+                await pilot.click("#set-pill")
+                await pilot.pause(0.5)
+                assert self.app.pet["skin"] in VARIANT_KINDS
+                assert self.app.pet["last_pill_at"] is not None
+                assert self.app.pet["body_pattern"] == "seed"
+                pill = pilot.app.screen.query_one("#set-pill", Button)
+                assert pill.disabled  # cooldown active
+                await pilot.click("#set-close")
+                await pilot.pause(0.3)
+        self._run(scenario())
+
 
 if __name__ == "__main__":
     unittest.main()

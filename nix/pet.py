@@ -15,6 +15,9 @@ DEFAULT_PET = {
     "failures_survived": 0,
     "projects_seen": 0,
     "scans": 0,
+    "skin": None,
+    "tags": [],
+    "last_pill_at": None,
 }
 
 STAGES = {

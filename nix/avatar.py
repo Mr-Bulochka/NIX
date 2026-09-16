@@ -257,6 +257,11 @@ VARIANTS = [
 VARIANT_KINDS = [v["kind"] for v in VARIANTS]
 
 
+def choose_skin(not_kind: str | None = None) -> str:
+    pool = [k for k in VARIANT_KINDS if k != not_kind]
+    return random.choice(pool or list(VARIANT_KINDS))
+
+
 def _lerp(a: str, b: str, t: float) -> str:
     al = [int(a[i : i + 2], 16) for i in (1, 3, 5)]
     bl = [int(b[i : i + 2], 16) for i in (1, 3, 5)]
@@ -460,11 +465,14 @@ def _to_text(m, scale: int) -> Text:
 
 def render(pet: dict, root, scale: int = 1, blink: bool = False) -> Text:
     genes = genes_for(root, pet)
+    variant = pet.get("skin")
+    if variant not in VARIANT_KINDS:
+        variant = genes["variant"]
     stage = pet.get("body_pattern", "seed")
     if stage not in ("seed", "sprout", "bloom", "mystic"):
         stage = "seed"
     mood = pet.get("mood", "curious")
-    vm = _variant(genes["variant"])
+    vm = _variant(variant)
     palette = vm.get("palette") or PALETTES[genes["palette"]]
     m = _body_matrix(vm, palette, stage)
     _face(m, vm, genes, palette, mood, blink)

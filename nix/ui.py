@@ -12,7 +12,8 @@ from textual.widgets import (
     Button, Footer, Header, Input, Label, RichLog, Select, Static, Switch,
 )
 
-from .avatar import render as render_avatar
+from .avatar import genes_for as avatar_genes_for, render as render_avatar
+from .avatar import VARIANT_KINDS
 from .i18n import LANGUAGES, t as _t
 
 MODES = ("local", "safe", "git")
@@ -59,6 +60,7 @@ KIND_COLORS = {
     "SYSTEM": DIM,
     "SCAN": CYAN,
     "PET": PURPLE,
+    "ECHO": BLUE,
     "ERROR": RED,
     "WARN": YELLOW,
     "MUTATION": YELLOW,
@@ -95,8 +97,10 @@ Screen {{
 }}
 
 #pet-box {{
-    width: auto;
-    height: auto;
+    width: 12;
+    height: 8;
+    content-align: center middle;
+    color: {FG};
 }}
 
 #top-pet-name {{
@@ -159,7 +163,6 @@ Screen {{
     background: {RAISED};
 }}
 
-#btn-help {{ color: {BLUE}; }}
 #btn-scan {{ color: {CYAN}; }}
 #btn-status {{ color: {GREEN}; }}
 #btn-pet {{ color: {PURPLE}; }}
@@ -414,6 +417,26 @@ class SettingsModal(ModalScreen[None]):
         height: 1;
     }}
 
+    #set-body #set-skin-label {{
+        color: {PURPLE};
+    }}
+
+    #set-body #set-pill {{
+        width: 100%;
+        background: {RAISED};
+        border: round {BORDER};
+        color: {FG};
+    }}
+
+    #set-body #set-pill:hover {{
+        border: round {BLUE};
+        color: {BLUE};
+    }}
+
+    #set-body #set-pill:disabled {{
+        color: {DIM};
+    }}
+
     #set-close {{
         dock: bottom;
         width: 100%;
@@ -495,6 +518,14 @@ class SettingsModal(ModalScreen[None]):
                     ),
                 )
                 yield self._row(
+                    t("set.skin"),
+                    Label("", id="set-skin-label", classes="set-field"),
+                )
+                yield self._row(
+                    t("set.pill"),
+                    Button("", id="set-pill"),
+                )
+                yield self._row(
                     t("set.attempts"),
                     Input(str(cfg.attempts), id="set-attempts"),
                 )
@@ -522,6 +553,27 @@ class SettingsModal(ModalScreen[None]):
 
     def on_mount(self) -> None:
         self.query_one("#set-close", Button).label = self._t("modal.close")
+        self._update_pill()
+
+    def _update_pill(self) -> None:
+        t = self._t
+        pet = self._ui.nix.pet or {}
+        self.query_one("#set-skin-label", Label).update(
+            self._ui._skin_name(pet)
+        )
+        remaining = self._ui.nix.pill_remaining()
+        btn = self.query_one("#set-pill", Button)
+        if remaining is None:
+            btn.label = t("set.pill_ready")
+            btn.disabled = True
+            return
+        if remaining > 0:
+            minutes = int(remaining // 60) + (1 if remaining % 60 else 0)
+            btn.label = f"{t('set.pill_give')} \u00b7 {t('set.pill_cd', min=minutes)}"
+            btn.disabled = True
+        else:
+            btn.label = t("set.pill_give")
+            btn.disabled = False
 
     def _persist(self, message: str) -> None:
         self._save(self._cfg)
@@ -559,6 +611,18 @@ class SettingsModal(ModalScreen[None]):
             setattr(self._cfg, key, event.value)
             self._persist(self._t("set.saved"))
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if getattr(event.button, "id", "") == "set-close":
+            self.action_save_and_close()
+            return
+        if getattr(event.button, "id", "") != "set-pill":
+            return
+        ok, message = self._ui.nix.give_pill()
+        self._ui._refresh_pet()
+        self.notify(message, severity="information" if ok else "warning",
+                    timeout=4)
+        self._update_pill()
+
     def action_save_and_close(self) -> None:
         self._save(self._cfg)
         self._ui._refresh_pet()
@@ -574,8 +638,9 @@ class NixUI(App):
         Binding("ctrl+l", "clear_log", "Clear", priority=True),
         Binding("ctrl+s", "run_scan", "Scan", priority=True),
         Binding("ctrl+p", "run_pet", "Pet", priority=True),
-        Binding("pageup", "page_up", "Page up", priority=True),
-        Binding("pagedown", "page_down", "Page down", priority=True),
+        Binding("pageup", "page_up", "Page up", priority=True, show=False),
+        Binding("pagedown", "page_down", "Page down", priority=True,
+                show=False),
     ]
 
     CSS = APP_CSS
@@ -603,7 +668,6 @@ class NixUI(App):
                 yield RichLog(id="log", wrap=True, markup=True,
                               highlight=True, auto_scroll=True)
             with Horizontal(id="toolbar"):
-                yield Button("", id="btn-help")
                 yield Button("", id="btn-pet")
                 yield Button("", id="btn-scan")
                 yield Button("", id="btn-status")
@@ -644,7 +708,6 @@ class NixUI(App):
             "btn-status": "status",
             "btn-pet": "pet",
             "btn-settings": "settings",
-            "btn-help": "help",
             "btn-quit": "quit",
         }
         action = mapping.get(event.button.id)
@@ -694,7 +757,6 @@ class NixUI(App):
         self.query_one("#btn-status", Button).label = self._t("btn.status")
         self.query_one("#btn-pet", Button).label = self._t("btn.pet")
         self.query_one("#btn-settings", Button).label = self._t("btn.settings")
-        self.query_one("#btn-help", Button).label = self._t("btn.help")
         self.query_one("#btn-quit", Button).label = self._t("btn.quit")
         self.query_one("#cmd", Input).placeholder = self._t("cmd.placeholder")
         self._refresh_header()
@@ -800,6 +862,16 @@ class NixUI(App):
             "\u2588", f"[{color}]\u2588[/]"
         )
 
+    def _skin_name(self, pet: dict | None) -> str:
+        pet = pet or self.nix.pet or {}
+        kind = pet.get("skin")
+        if kind not in VARIANT_KINDS:
+            try:
+                kind = avatar_genes_for(self.nix.root, pet)["variant"]
+            except Exception:
+                kind = ""
+        return self._t(f"skin.{kind}") if kind in VARIANT_KINDS else self._t("skin.random")
+
     def _set_stat(self, query: str, text: str, color: str) -> None:
         try:
             label = self.query_one(query, Label)
@@ -821,23 +893,43 @@ class NixUI(App):
     def show_help(self, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
         t = self._t
         log = self._log()
-        log.write(Text(f"  {t('tbl.commands').upper()}\n",
+        log.write(Text(f"  {t('tbl.commands').upper()}",
                        style=f"bold {BLUE}"))
         for title, items in groups:
             log.write(Text("    " + title, style=f"bold {PURPLE}"))
-            body = Text()
             for usage, desc in items:
-                body.append("      " + usage.ljust(22), style=GREEN)
-                body.append(desc + "\n", style=FG)
-            log.write(body)
+                log.write(
+                    Text()
+                    .append("      " + usage.ljust(22), style=GREEN)
+                    .append(desc, style=FG)
+                )
+
+    def show_block(self, title: str,
+                   rows: list[tuple[str, str, str]]) -> None:
+        self._log_write_header(self._log(), title)
+        for label, value, color in rows:
+            self._log().write(
+                Text()
+                .append("    " + str(label).ljust(24), style=CYAN)
+                .append(str(value), style=color)
+            )
+
+    def _log_write_header(self, log, title: str) -> None:
+        log.write(Text(f"  {title.upper()}", style=f"bold {BLUE}"))
+
+    def show_tree(self, title: str, lines: list[str]) -> None:
+        self._log_write_header(self._log(), title)
+        for line in lines:
+            self._log().write(Text("    " + line, style=FG))
 
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
                     functions: int, classes: int,
                     source_files: int, total_lines: int) -> None:
         t = self._t
-        text = Text(f"  {t('tbl.project_status').upper()}\n",
-                    style=f"bold {BLUE}")
+        log = self._log()
+        log.write(Text(f"  {t('tbl.project_status').upper()}",
+                       style=f"bold {BLUE}"))
         fields = [
             (t("st.root"), root, FG),
             (t("st.mode"), mode.upper(), BLUE),
@@ -850,28 +942,32 @@ class NixUI(App):
             (t("st.lines"), f"{total_lines:,}", GREEN),
         ]
         for label, value, color in fields:
-            text.append(f"    {label:<20}", style=CYAN)
-            text.append(value + "\n", style=color)
-        self._log().write(text)
+            log.write(
+                Text()
+                .append("    " + label.ljust(20), style=CYAN)
+                .append(value, style=color)
+            )
 
     def show_scan(self, info: "ProjectInfo") -> None:
         t = self._t
         log = self._log()
-        head = Text()
-        head.append(f"{info.files} {t('scan.files')}  ", style=CYAN)
-        head.append(f"{info.directories} {t('scan.dirs')}  ", style=CYAN)
-        head.append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
-        head.append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
-        head.append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
-        log.write(head)
+        log.write(
+            Text()
+            .append(f"{info.files} {t('scan.files')}  ", style=CYAN)
+            .append(f"{info.directories} {t('scan.dirs')}  ", style=CYAN)
+            .append(f"{info.functions} {t('scan.functions')}  ", style=CYAN)
+            .append(f"{info.classes} {t('scan.classes')}  ", style=CYAN)
+            .append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
+        )
         if info.extensions:
             log.write(Text(f"  {t('tbl.extensions').upper()}",
                            style=f"bold {PURPLE}"))
-            body = Text()
             for ext, count in info.top_extensions:
-                body.append(f"    {ext:<14}", style=FG)
-                body.append(str(count) + "\n", style=GREEN)
-            log.write(body)
+                log.write(
+                    Text()
+                    .append("    " + ext.ljust(14), style=FG)
+                    .append(str(count), style=GREEN)
+                )
 
     def show_pet(self, pet: dict) -> None:
         t = self._t
@@ -881,9 +977,10 @@ class NixUI(App):
         pattern = pet.get("body_pattern", "seed")
         art = render_avatar(pet, self.nix.root, scale=2,
                             blink=self._blink == 1)
-        text = Text()
+        t2 = Text()
         rows = [
             (t("pet.name"), pet.get("name", "???"), FG),
+            (t("pet.skin"), self._skin_name(pet), PURPLE),
             (t("pet.mood"), mood_label, mood_style),
             (t("pet.energy"), str(pet.get("energy", 100)), GREEN),
             (t("pet.age"), str(pet.get("age", 0)), FG),
@@ -892,13 +989,16 @@ class NixUI(App):
             (t("pet.mutations"), str(pet.get("mutations_witnessed", 0)), YELLOW),
             (t("pet.failures"), str(pet.get("failures_survived", 0)), RED),
             (t("pet.scans"), str(pet.get("scans", 0)), CYAN),
+            (t("pet.tags"), ", ".join(pet.get("tags", [])) or "—", CYAN),
         ]
-        for label, value, color in rows:
-            text.append(f"    {label:<20}", style=CYAN)
-            text.append(value + "\n", style=color)
         log = self._log()
         log.write(art)
-        log.write(text)
+        for label, value, color in rows:
+            log.write(
+                Text()
+                .append("    " + label.ljust(20), style=CYAN)
+                .append(value, style=color)
+            )
 
     def show_settings(self, config: "Config") -> None:
         self.push_screen(
@@ -914,10 +1014,8 @@ class NixUI(App):
             return
         log.write(Text(f"  {t('tbl.session_log').upper()}  {path}",
                        style=f"bold {DIM}"))
-        body = Text()
         for line in lines[-40:]:
-            body.append("    " + line + "\n", style=DIM)
-        log.write(body)
+            log.write(Text("    " + line, style=DIM))
 
     def show_history(self, entries: list[dict]) -> None:
         t = self._t
@@ -930,14 +1028,17 @@ class NixUI(App):
         kind_colors = {
             "SYSTEM": DIM, "SCAN": CYAN, "PET": PURPLE, "ERROR": RED,
         }
-        body = Text()
         for entry in entries[-40:]:
             kind = entry.get("kind", "")
-            body.append("    ", style=DIM)
-            body.append(f"{entry.get('ts', ''):<12} ", style=DIM)
-            body.append(f"{kind:<8}", style=kind_colors.get(kind, FG))
-            body.append(entry.get("message", "") + "\n", style=FG)
-        log.write(body)
+            log.write(
+                Text()
+                .append("    ", style=DIM)
+                .append(f"{entry.get('ts', '')}", style=DIM)
+                .append("  ", style=DIM)
+                .append(f"{kind}", style=kind_colors.get(kind, FG))
+                .append("  ", style=FG)
+                .append(entry.get("message", ""), style=FG)
+            )
 
     def show_error(self, text: str) -> None:
         self.show_message("ERROR", text)
