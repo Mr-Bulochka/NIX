@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from . import __version__
+from .brain import Brain
 from .config import ConfigStore
 from .journal import Journal
 from .logger import SessionLogger
@@ -29,6 +30,8 @@ class NixApp:
 
         self.pet_store = Pet(self.state.nix)
         self.pet = self.pet_store.load()
+
+        self.brain = Brain(self.state.nix, self.root)
 
     def run(self) -> None:
         from .ui import NixUI

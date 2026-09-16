@@ -34,6 +34,9 @@ class _StubUI:
     def show_logs(self, *args):
         pass
 
+    def show_code(self, *args):
+        pass
+
     def show_history(self, *args):
         pass
 
@@ -61,7 +64,8 @@ class TestCommands(unittest.TestCase):
         self.assertIn("pwd", COMMANDS)
         for name in ("pill", "tree", "ls", "lang", "tests", "deps", "find",
                      "todo", "note", "memory", "journal", "tag",
-                     "checkpoint", "save", "echo", "time", "which", "stats"):
+                     "checkpoint", "save", "echo", "time", "which", "stats",
+                     "module", "defs", "blocks", "wrap", "gen", "ident"):
             self.assertIn(name, COMMANDS)
 
     def test_get_command(self):

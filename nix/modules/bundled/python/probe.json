@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "find_function",
+      "source": "def foo():\n    pass\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 2}]
+    },
+    {
+      "name": "find_class",
+      "source": "class Bar:\n    def __init__(self):\n        pass\n",
+      "blocks": [{"kind": "class", "name": "Bar", "start": 1, "end": 3}]
+    }
+  ]
+}

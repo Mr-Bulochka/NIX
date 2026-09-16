@@ -1,0 +1,30 @@
+{
+  "blocks": {
+    "function": {
+      "start": "^(\\s*)(?:async\\s+)?def\\s+(?P<name>\\w+)\\s*\\(",
+      "body": "indent"
+    },
+    "class": {
+      "start": "^(\\s*)class\\s+(?P<name>\\w+)",
+      "body": "indent"
+    },
+    "if": {
+      "start": "^(\\s*)if\\s+",
+      "body": "indent",
+      "alternate": ["elif", "else"]
+    },
+    "for": {
+      "start": "^(\\s*)for\\s+",
+      "body": "indent"
+    },
+    "while": {
+      "start": "^(\\s*)while\\s+",
+      "body": "indent"
+    },
+    "try": {
+      "start": "^(\\s*)try\\s*:",
+      "body": "indent",
+      "alternate": ["except", "finally"]
+    }
+  }
+}

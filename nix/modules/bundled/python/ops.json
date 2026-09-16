@@ -1,0 +1,25 @@
+{
+  "ops": {
+    "wrap-in-try": {
+      "before": ["try:"],
+      "inner_indent": 4,
+      "after": ["except {{err}} as {{e}}:", "    {{handler}}"],
+      "slots": {"err": "Exception", "e": "e", "handler": "pass"}
+    },
+    "wrap-in-if": {
+      "before": ["if {{cond}}:"],
+      "inner_indent": 4,
+      "after": ["else:", "    {{alternate}}"],
+      "slots": {"cond": "True", "alternate": "pass"}
+    },
+    "wrap-in-while": {
+      "before": ["while {{cond}}:"],
+      "inner_indent": 4,
+      "after": ["else:", "    {{alternate}}"],
+      "slots": {"cond": "True", "alternate": "pass"}
+    },
+    "comment": {
+      "prefix": "# "
+    }
+  }
+}

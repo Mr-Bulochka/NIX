@@ -68,6 +68,30 @@ TOMMY_PAL = {
     "cheek": "#ff8a6b", "accent": "#ffe9c8", "outline": "#5e3a18",
 }
 
+# Mint-green slime.
+SLIME_PAL = {
+    "hi": "#7fe8d9", "lo": "#2a9c8f", "belly": "#d0fbf3",
+    "cheek": "#ffb3a6", "accent": "#e6fffb", "outline": "#176a60",
+}
+
+# Lavender antenna alien.
+ANTENNA_PAL = {
+    "hi": "#c9a6ff", "lo": "#8a5fd6", "belly": "#efe2ff",
+    "cheek": "#ffb3d6", "accent": "#ffe4ff", "outline": "#4a2f7a",
+}
+
+# Crimson cone.
+CONE_PAL = {
+    "hi": "#ff8f8f", "lo": "#d6453d", "belly": "#ffe1de",
+    "cheek": "#ffb37a", "accent": "#fff0e6", "outline": "#7a1f1f",
+}
+
+# Teal pancake-creature.
+LEGGY_PAL = {
+    "hi": "#4fd8d8", "lo": "#208f9f", "belly": "#d8fbfb",
+    "cheek": "#ffb3a6", "accent": "#e6fffb", "outline": "#145f6b",
+}
+
 EYES = {
     "dark": "#23262e",
     "amber": "#7a4a1f",
@@ -248,10 +272,14 @@ VARIANTS = [
      "palette": POU_PAL, "pou_eyes": True},
     {"kind": "tommy", "grid": TOMMY, "face_y": 5, "mouth_y": 9,
      "palette": TOMMY_PAL},
-    {"kind": "slime", "grid": SLIME, "face_y": 5, "mouth_y": 8},
-    {"kind": "antenna", "grid": ANTENNA, "face_y": 5, "mouth_y": 8},
-    {"kind": "cone", "grid": CONE, "face_y": 6, "mouth_y": 9},
-    {"kind": "leggy", "grid": LEGGY, "face_y": 3, "mouth_y": 7},
+    {"kind": "slime", "grid": SLIME, "face_y": 5, "mouth_y": 8,
+     "palette": SLIME_PAL},
+    {"kind": "antenna", "grid": ANTENNA, "face_y": 5, "mouth_y": 8,
+     "palette": ANTENNA_PAL},
+    {"kind": "cone", "grid": CONE, "face_y": 6, "mouth_y": 9,
+     "palette": CONE_PAL},
+    {"kind": "leggy", "grid": LEGGY, "face_y": 3, "mouth_y": 7,
+     "palette": LEGGY_PAL},
 ]
 
 VARIANT_KINDS = [v["kind"] for v in VARIANTS]

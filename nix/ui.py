@@ -922,6 +922,15 @@ class NixUI(App):
         for line in lines:
             self._log().write(Text("    " + line, style=FG))
 
+    def show_code(self, title: str, snippet: list[str]) -> None:
+        self._log_write_header(self._log(), title)
+        for line in snippet:
+            self._log().write(
+                Text().append("    " + line, style=GREEN)
+                if line.lstrip().startswith(("#", "//", "*"))
+                else Text().append("    " + line, style=FG)
+            )
+
     def show_status(self, *, root: str, mode: str, attempts: int,
                     max_attempts: int, files: int, dirs: int,
                     functions: int, classes: int,

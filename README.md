@@ -70,8 +70,52 @@ several commands in a single line with `;` or `&&`.
 | `clear` | Clear the event log |
 | `quit` | Exit NIX |
 
+### Code & language modules
+
+NIX understands code through **code modules** (language modules) —
+plain-data packs (no code) that describe how blocks, operations and
+generation work in a given language. Bundled modules live in
+`nix/modules/bundled/`; user modules are picked up from
+`~/.nix/modules/<id>/` and shadow bundled ones.
+
+| Command | Description |
+|---------|-------------|
+| `module [name]` | List language modules or show one in detail |
+| `defs [--max N] [glob]` | List project functions/classes (from the project index) |
+| `blocks <file> <line>` | Show the block enclosing a line |
+| `wrap <file> <line> in <op> [--slot v] [--apply]` | Wrap a block in a language op (dry-run unless `--apply`) |
+| `gen <type> <name> [--into f] [--at N] [--apply] [--params .. --ret .. --doc .. --body ..]` | Generate code from a template (preview unless `--into`; `--apply` writes) |
+| `rename <old> <new> [--file f] [--apply]` | Project-wide symbolic rename (dry-run unless `--apply`) |
+| `ident` | Show the project's identity patterns (naming, docstrings, ...) |
+
+### Version control companion
+
+| Command | Description |
+|---------|-------------|
+| `git status` | Short working-tree status |
+| `git log [N]` | Last N commits oneline |
+| `git diff` | Change statistics |
+| `git branch` | Current branch |
+| `git commit [msg] [--apply]` | Stage all and commit; message auto-generated from diff (dry-run unless `--apply`) |
+
+Module layout:
+
+```
+nix/modules/bundled/python/
+├── module.json     id, name, version, extensions
+├── blocks.json     block start regex + body mode (indent/braces/do-end)
+├── ops.json        semantic ops (wrap-in-try, wrap-in-if, ...)
+├── gen/*.tmpl      generation templates (function, class, ...)
+└── probe.json      self-test cases
+```
+
+The pet's memory of a project lives in `.nix/brain/` (`index.json`,
+`patterns.json`) and is (re)built by `defs`/`ident`/`gen` on demand, so
+the pet always knows the project fresher than the developer does.
+
 Pets evolve and get a **new random skin** when you give them a pill (once every
-30 minutes); the stage/pattern is always preserved.
+30 minutes); the stage/pattern is always preserved. Each of the 8 skins has
+its own signature palette, so every pill is a visible transformation.
 
 ## `.nix/` Structure
 
@@ -88,6 +132,10 @@ Pets evolve and get a **new random skin** when you give them a pill (once every
 │   └── temporary/
 ├── pet/
 │   └── identity.json
+├── brain/
+│   ├── index.json
+│   ├── patterns.json
+│   └── backups/
 └── origin/
 ```
 
@@ -101,11 +149,12 @@ python -m nix
 
 ## Roadmap
 
-- **Stage A** — Foundation + modern TUI (current)
-- **Stage B** — Mutation Engine + Sandbox + World Laws
-- **Stage C** — Checkpoint Manager + Experience System
-- **Stage D** — Destructive Testing
-- **Stage E** — Git/GitHub Bridge
-- **Stage F** — Tamagotchi Evolution
-- **Stage G** — Full TUI polish
-- **Stage H** — Integration Testing + Packaging
+- **Stage A** — Foundation + modern TUI (done)
+- **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (current)
+- **Stage C** — Mutation Engine + Sandbox + World Laws
+- **Stage D** — Checkpoint Manager + Experience System
+- **Stage E** — Destructive Testing
+- **Stage F** — GitHub/GitLab Bridge
+- **Stage G** — Tamagotchi Evolution
+- **Stage H** — Full TUI polish
+- **Stage I** — IDE daemon + protocol (NIX as a language-agnostic senior multi-tool)

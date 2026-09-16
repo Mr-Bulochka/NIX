@@ -20,6 +20,8 @@ FG = "#c7ccd4"
 CYAN = "#85d3f5"
 GREEN = "#7fb572"
 YELLOW = "#d4a35c"
+PURPLE = "#c9a6ff"
+DIM = "#6b7280"
 
 
 @dataclass
@@ -197,9 +199,12 @@ def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
         (app.t("help.grp.project"),
          ["scan", "status", "stats", "tree", "ls", "lang", "tests",
           "deps", "find", "todo"]),
+        (app.t("help.grp.code"),
+         ["module", "defs", "blocks", "wrap", "gen", "rename", "ident"]),
         (app.t("help.grp.pet"), ["pet", "pill", "settings", "tag"]),
         (app.t("help.grp.memory"), ["note", "memory", "journal"]),
         (app.t("help.grp.safety"), ["mode", "attempts", "save"]),
+        (app.t("help.grp.git"), ["git"]),
         (app.t("help.grp.system"), ["logs", "history", "checkpoint",
                                     "clear", "quit"]),
     ):
@@ -775,4 +780,470 @@ def cmd_echo(app: "NixApp", args: list[str]) -> CommandResult:
 def cmd_time(app: "NixApp", args: list[str]) -> CommandResult:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     app.ui.show_message("SYSTEM", app.t("fb.time", time=now))
+    return CommandResult()
+
+
+# ---- code: language modules & construction --------------------------
+
+
+def _resolve_project_file(app: "NixApp", rel: str) -> Path | None:
+    path = Path(rel)
+    if not path.is_absolute():
+        path = app.root / path
+    path = path.resolve()
+    root = app.root.resolve()
+    if path == root or root not in path.parents:
+        return None
+    return path if path.exists() else None
+
+
+def _to_snake(name: str) -> str:
+    name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name)
+    name = name.replace("-", "_").replace(" ", "_")
+    return name.lower()
+
+
+def _to_pascal(name: str) -> str:
+    parts = re.split(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])", name)
+    return "".join(p[:1].upper() + p[1:] for p in parts if p)
+
+
+@register("module", "language knowledge modules", "module [name]")
+def cmd_module(app: "NixApp", args: list[str]) -> CommandResult:
+    flags, rest = parse_flags(args)
+    if rest:
+        from .modules import load_module
+        mod = load_module(rest[0])
+        if mod is None:
+            app.ui.show_message("ERROR", app.t("fb.no_module", id=rest[0]))
+            return CommandResult()
+        app.ui.show_block(app.t("tbl.module"), [
+            (app.t("ident.name"), mod.name, PURPLE),
+            (app.t("ident.version"), mod.version, FG),
+            (app.t("ident.extensions"), ", ".join(mod.extensions), CYAN),
+            (app.t("ident.blocks"), ", ".join(mod.blocks), GREEN),
+            (app.t("ident.ops"), ", ".join(mod.ops), GREEN),
+            (app.t("ident.templates"), ", ".join(mod.gen), CYAN),
+            (app.t("ident.source"), mod.source, DIM),
+        ])
+        return CommandResult()
+    from .modules import all_modules
+    mods = all_modules()
+    if not mods:
+        app.ui.show_message("SYSTEM", app.t("fb.no_modules"))
+        return CommandResult()
+    rows = []
+    for mod in mods:
+        rows.append((mod.id, f"v{mod.version} · "
+                             f"{', '.join(mod.extensions)[:30]} · "
+                             f"{len(mod.blocks)} blocks", PURPLE))
+    app.ui.show_block(app.t("tbl.modules"), rows)
+    return CommandResult()
+
+
+@register("defs", "list project functions/classes", "defs [--max N] [glob]")
+def cmd_defs(app: "NixApp", args: list[str]) -> CommandResult:
+    flags, rest = parse_flags(args)
+    index, _ = app.brain.ensure()
+    symbols = index.get("symbols", [])
+    for token in rest:
+        symbols = [s for s in symbols if token.lower() in s["file"].lower()
+                   or token.lower() in s["name"].lower()]
+    if not symbols:
+        app.ui.show_message("SYSTEM", app.t("fb.no_symbols"))
+        return CommandResult()
+    max_n = _num(flags.get("max"), 50)
+    rows = []
+    for sym in symbols[:max_n]:
+        color = CYAN if sym["kind"] == "class" else GREEN
+        rows.append((f"{sym['file']}:{sym['line']}",
+                     f"{sym['kind']} {sym['name']}", color))
+    app.ui.show_block(app.t("tbl.symbols"), rows)
+    return CommandResult()
+
+
+@register("blocks", "show the block enclosing a line", "blocks <file> <line>")
+def cmd_blocks(app: "NixApp", args: list[str]) -> CommandResult:
+    from .modules import module_for_file, load_module
+    from .modules.engine import find_block_at_line
+    flags, rest = parse_flags(args)
+    if len(rest) < 2:
+        app.ui.show_message("ERROR", app.t("fb.blocks_usage"))
+        return CommandResult()
+    path = _resolve_project_file(app, rest[0])
+    if path is None:
+        app.ui.show_message("ERROR", app.t("fb.file_missing", path=rest[0]))
+        return CommandResult()
+    line_no = _num(rest[1], 0)
+    lang_id = module_for_file(str(path)) if path else None
+    mod = load_module(lang_id) if lang_id else None
+    if mod is None:
+        app.ui.show_message("ERROR", app.t("fb.no_lang_mod", path=str(path)))
+        return CommandResult()
+    try:
+        src = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        app.ui.show_message("ERROR", app.t("fb.failed", name="read", exc=exc))
+        return CommandResult()
+    if line_no < 1 or line_no > len(src):
+        app.ui.show_message("ERROR", app.t("fb.line_out", line=line_no))
+        return CommandResult()
+    block = find_block_at_line(src, line_no, mod.blocks)
+    if block is None:
+        app.ui.show_message("SYSTEM", app.t("fb.block_none", line=line_no))
+        return CommandResult()
+    snippet = src[block.start - 1: block.end]
+    app.ui.show_block(app.t("tbl.block"), [
+        (app.t("ident.kind"), block.kind, GREEN),
+        (app.t("ident.name"), block.name, PURPLE),
+        (app.t("ident.lines"), f"{block.start}-{block.end}", CYAN),
+    ])
+    app.ui.show_code(f"{path.name} · {block.name}", snippet)
+    return CommandResult()
+
+
+@register("wrap", "wrap a block in a language op", "wrap <file> <line> in <op> [slots] [--apply]")
+def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
+    from .modules import module_for_file, load_module
+    from .modules.engine import find_block_at_line, apply_wrap
+    flags, rest = parse_flags(args)
+    if len(rest) < 2 or "in" not in rest:
+        app.ui.show_message("ERROR", app.t("fb.wrap_usage"))
+        return CommandResult()
+    file_arg = rest[0]
+    line_no = _num(rest[1], 0)
+    idx = rest.index("in")
+    op_name = rest[idx + 1] if idx + 1 < len(rest) else ""
+    if not op_name:
+        app.ui.show_message("ERROR", app.t("fb.wrap_usage"))
+        return CommandResult()
+    path = _resolve_project_file(app, file_arg)
+    if path is None:
+        app.ui.show_message("ERROR", app.t("fb.file_missing", path=file_arg))
+        return CommandResult()
+    lang_id = module_for_file(str(path)) if path else None
+    mod = load_module(lang_id) if lang_id else None
+    if mod is None:
+        app.ui.show_message("ERROR", app.t("fb.no_lang_mod", path=str(path)))
+        return CommandResult()
+    op_def = mod.ops.get(op_name)
+    if op_def is None:
+        app.ui.show_message("ERROR", app.t(
+            "fb.no_op", op=op_name, ops=", ".join(mod.ops)))
+        return CommandResult()
+    try:
+        src = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        app.ui.show_message("ERROR", app.t("fb.failed", name="read", exc=exc))
+        return CommandResult()
+    if line_no < 1 or line_no > len(src):
+        app.ui.show_message("ERROR", app.t("fb.line_out", line=line_no))
+        return CommandResult()
+    block = find_block_at_line(src, line_no, mod.blocks)
+    if block is None:
+        app.ui.show_message("SYSTEM", app.t("fb.block_none", line=line_no))
+        return CommandResult()
+    slots = {k: str(v) for k, v in flags.items()
+             if k not in ("apply",)}
+    result = apply_wrap(src, block, op_def, slots or None)
+    if not flags.get("apply"):
+        changed_len = len(result) - block.start - (len(src) - block.end)
+        preview = [src[block.start - 1]] + \
+            result[block.start: block.start + changed_len]
+        app.ui.show_code(f"{op_name} · {file_arg}:{line_no} · "
+                         f"({app.t('fb.wrap_dry')})", preview)
+        return CommandResult()
+    try:
+        original = "\n".join(src) + "\n"
+        dest = app.state.nix / "brain" / "backups"
+        dest.mkdir(parents=True, exist_ok=True)
+        import hashlib
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
+        backup = dest / f"{stamp}-{digest}-{path.name}"
+        backup.write_text(original, encoding="utf-8")
+        path.write_text("\n".join(result) + "\n", encoding="utf-8")
+    except OSError as exc:
+        app.ui.show_message("ERROR", app.t("fb.failed", name="write", exc=exc))
+        return CommandResult()
+    app.journal.write("CODE", f"wrapped {block.name} in {op_name} ({path.name}:{line_no})")
+    app.session_logger.write("CODE", f"wrap {op_name} {path.name}:{line_no}")
+    if app.pet:
+        app.pet_store.update_mood(app.pet, "success")
+        app.pet_store.save(app.pet)
+    app.ui.show_message("SYSTEM", app.t(
+        "fb.wrap_applied", name=block.name, op=op_name,
+        file=path.name, backup=backup.name))
+    return CommandResult()
+
+
+@register("gen", "generate code from a language template",
+          "gen <type> <name> [--into file] [--at line] [--after] "
+          "[--apply] [--params .. --ret .. --doc .. --body ..] [--lang python]")
+def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
+    from .modules import load_module
+    from .modules.engine import render_template, leading_ws
+    import hashlib
+    flags, rest = parse_flags(args)
+    if len(rest) < 2:
+        app.ui.show_message("ERROR", app.t("fb.gen_usage"))
+        return CommandResult()
+    gtype, name = rest[0], rest[1]
+    lang_id = str(flags.get("lang", "python"))
+    mod = load_module(lang_id)
+    candidates = sorted(mod.gen) if mod else []
+    if mod is None or gtype not in candidates:
+        app.ui.show_message("ERROR", app.t(
+            "fb.unsupported_gen", type=gtype, types=", ".join(candidates)))
+        return CommandResult()
+    _, patterns = app.brain.ensure()
+    style = patterns.get("naming_top", "unknown")
+    if style == "snake" and not re.match(r"^[a-z0-9_]+$", name):
+        name = _to_snake(name)
+    elif style == "pascal" and not re.match(r"^[A-Z]", name):
+        name = _to_pascal(name)
+    doc = flags.get("doc", False)
+    docstring = ""
+    if doc:
+        if isinstance(doc, str) and doc.strip():
+            docstring = '"""' + doc.strip() + '"""'
+        else:
+            docstring = f'"""{name}."""'
+    ret = ""
+    if flags.get("ret"):
+        value = str(flags["ret"])
+        if not value.startswith("->"):
+            value = "-> " + value
+        ret = " " + value
+    params = str(flags.get("params", ""))
+    body = str(flags.get("body", "pass"))
+    slots = {
+        "name": name, "params": params, "ret": ret,
+        "docstring": docstring, "body": body,
+        "base": str(flags.get("base", "")) or "",
+    }
+    rendered = render_template(mod.gen[gtype], slots)
+    snippet_lines = rendered.splitlines()
+    into_file = str(flags.get("into", "")) or None
+    if not into_file:
+        app.ui.show_code(f"# {gtype}: {name} · {lang_id} / {style}",
+                         snippet_lines)
+        return CommandResult()
+    path = _resolve_project_file(app, into_file)
+    if path is None:
+        app.ui.show_message("ERROR", app.t("fb.file_missing", path=into_file))
+        return CommandResult()
+    try:
+        orig_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        app.ui.show_message("ERROR", app.t("fb.failed", name="read", exc=exc))
+        return CommandResult()
+    orig_lines = orig_text.splitlines(keepends=True)
+    at_raw = str(flags.get("at", "")) or None
+    after = bool(flags.get("after"))
+    if at_raw is not None and at_raw.lower() != "end":
+        try:
+            at_line = int(at_raw)
+        except ValueError:
+            app.ui.show_message("ERROR", app.t("fb.gen_bad_line"))
+            return CommandResult()
+        if at_line < 1 or at_line > len(orig_lines):
+            app.ui.show_message("ERROR", app.t("fb.line_out", line=at_line))
+            return CommandResult()
+        anchor_indent = leading_ws(orig_lines[at_line - 1])
+        indented = _indent_lines(snippet_lines, anchor_indent)
+        insert_idx = at_line - (0 if after else 1)
+        new_lines = orig_lines[:insert_idx] + \
+            [ln + "\n" for ln in indented] + orig_lines[insert_idx:]
+    else:
+        anchor_indent = 0
+        for i in range(len(orig_lines) - 1, -1, -1):
+            if orig_lines[i].strip():
+                anchor_indent = leading_ws(orig_lines[i])
+                break
+        indented = _indent_lines(snippet_lines, anchor_indent)
+        sep = ["\n"] if orig_lines and orig_lines[-1].strip() else []
+        new_lines = orig_lines + sep + [ln + "\n" for ln in indented]
+    preview = _indent_lines(snippet_lines, anchor_indent)
+    app.ui.show_code(f"{gtype}: {name} → {path.name}", preview)
+    if not flags.get("apply"):
+        app.ui.show_message("SYSTEM", app.t("fb.wrap_dry"))
+        return CommandResult()
+    try:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
+        backup_dir = app.state.nix / "brain" / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = backup_dir / f"{stamp}-gen-{digest}-{path.name}"
+        backup.write_text(orig_text, encoding="utf-8")
+        path.write_text("".join(new_lines), encoding="utf-8")
+    except OSError as exc:
+        app.ui.show_message("ERROR", app.t("fb.failed", name="write", exc=exc))
+        return CommandResult()
+    app.journal.write("CODE", f"gen {gtype} {name} → {path.name}")
+    if app.pet:
+        app.pet_store.update_mood(app.pet, "success")
+        app.pet_store.save(app.pet)
+    app.ui.show_message("SYSTEM", app.t(
+        "fb.gen_written", name=name, file=path.name, backup=backup.name))
+    return CommandResult()
+
+
+def _indent_lines(lines: list[str], n: int) -> list[str]:
+    """Indent non-empty lines by *n* spaces, keeping existing content."""
+    pad = " " * n
+    return [(pad + ln if ln.strip() else ln) for ln in lines]
+
+
+@register("rename", "project-wide symbolic rename",
+          "rename <old> <new> [--file f] [--apply]")
+def cmd_rename(app: "NixApp", args: list[str]) -> CommandResult:
+    import re as _re
+    flags, rest = parse_flags(args)
+    if len(rest) < 2:
+        app.ui.show_message("ERROR", app.t("fb.rename_usage"))
+        return CommandResult()
+    old, new = rest[0], rest[1]
+    file_filter = str(flags.get("file", "")) or None
+    paths: list[Path] = []
+    if file_filter:
+        p = _resolve_project_file(app, file_filter)
+        if p is not None:
+            paths = [p]
+    else:
+        index, _ = app.brain.ensure()
+        seen: set[str] = set()
+        for sym in index.get("symbols", []):
+            seen.add(sym["file"])
+        paths = [app.root / f for f in sorted(seen) if (app.root / f).exists()]
+    if not paths:
+        app.ui.show_message("ERROR", app.t("fb.rename_no_files"))
+        return CommandResult()
+    pat = _re.compile(r"\b" + _re.escape(old) + r"\b")
+    changes: list[tuple[Path, int, list[str]]] = []
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        lines = text.splitlines(keepends=True)
+        count = sum(1 for ln in lines if pat.search(ln))
+        if count > 0:
+            new_lines = [pat.sub(new, ln) for ln in lines]
+            changes.append((path, count, new_lines))
+    if not changes:
+        app.ui.show_message("SYSTEM", app.t("fb.rename_none", old=old))
+        return CommandResult()
+    total = sum(cnt for _, cnt, _ in changes)
+    rows = [
+        (str(path.relative_to(app.root)), str(cnt), CYAN)
+        for path, cnt, _ in changes
+    ]
+    app.ui.show_block(app.t("tbl.matches", total=total, old=old), rows)
+    if not flags.get("apply"):
+        app.ui.show_message("SYSTEM", app.t("fb.wrap_dry"))
+        return CommandResult()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    for path, count, new_lines in changes:
+        try:
+            import hashlib
+            digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
+            backup_dir = app.state.nix / "brain" / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup = backup_dir / f"{stamp}-rename-{digest}-{path.name}"
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+            path.write_text("".join(new_lines), encoding="utf-8")
+        except OSError as exc:
+            app.ui.show_message("ERROR", app.t("fb.failed", name="rename", exc=exc))
+            continue
+    app.journal.write("CODE", f"rename {old} → {new} in {len(changes)} file(s)")
+    if app.pet:
+        app.pet_store.update_mood(app.pet, "success")
+        app.pet_store.save(app.pet)
+    app.ui.show_message("SYSTEM", app.t("fb.rename_applied", old=old, new=new,
+                                         files=len(changes)))
+    return CommandResult()
+
+
+@register("git", "version control companion",
+          "git [status|log|diff|branch|commit] [--apply]")
+def cmd_git(app: "NixApp", args: list[str]) -> CommandResult:
+    from .git import Git
+    flags, rest = parse_flags(args)
+    git = Git(app.root)
+    if not git.is_repo():
+        app.ui.show_message("ERROR", app.t("fb.git_not_repo"))
+        return CommandResult()
+    sub = rest[0] if rest else "status"
+    extra = rest[1:] if len(rest) > 1 else []
+    if sub == "status":
+        lines = git.status_short()
+        if not lines:
+            app.ui.show_message("SYSTEM", app.t("fb.git_clean"))
+        else:
+            app.ui.show_code(app.t("tbl.status"), lines)
+        return CommandResult()
+    if sub == "log":
+        n = _num(extra[0], 10) if extra else 10
+        lines = git.log(n)
+        if not lines:
+            app.ui.show_message("SYSTEM", app.t("fb.git_no_log"))
+        else:
+            app.ui.show_code(app.t("tbl.log"), lines)
+        return CommandResult()
+    if sub == "branch":
+        branch = git.branch()
+        app.ui.show_message("SYSTEM", app.t("fb.git_branch", branch=branch))
+        return CommandResult()
+    if sub == "diff":
+        cached = "--cached" in flags
+        lines = git.diff_stat(cached=cached)
+        if not lines:
+            app.ui.show_message("SYSTEM", app.t("fb.git_no_diff"))
+        else:
+            app.ui.show_code(app.t("tbl.diff"), lines)
+        return CommandResult()
+    if sub == "commit":
+        if not flags.get("apply"):
+            msg = git.generate_message()
+            diff = git.diff_stat()
+            app.ui.show_block(app.t("tbl.commit"), [
+                (app.t("ident.message"), msg, GREEN),
+                (app.t("ident.files"), str(len(diff)), CYAN),
+            ])
+            app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+            return CommandResult()
+        stage_result = git.add_all()
+        if not stage_result.ok:
+            app.ui.show_message("ERROR", stage_result.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        msg = " ".join(extra) if extra else git.generate_message()
+        commit_result = git.commit(msg)
+        if not commit_result.ok:
+            app.ui.show_message("ERROR", commit_result.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        app.journal.write("GIT", f"commit: {msg}")
+        app.ui.show_message("SYSTEM", app.t("fb.git_committed", msg=msg))
+        return CommandResult()
+    app.ui.show_message("ERROR", app.t("fb.git_unknown_sub", sub=sub))
+    return CommandResult()
+
+
+@register("ident", "project identity patterns", "ident")
+def cmd_ident(app: "NixApp", args: list[str]) -> CommandResult:
+    _, patterns = app.brain.ensure()
+    missing_pattern = any(k not in patterns for k in
+                          ("naming_top", "functions", "docstrings"))
+    if missing_pattern:
+        app.brain.build()
+        _, patterns = app.brain.load()
+    index, _ = app.brain.load()
+    rows = [
+        (app.t("ident.name_style"), str(patterns.get("naming_top", "?")), PURPLE),
+        (app.t("ident.files"), str(index.get("files", 0)), CYAN),
+        (app.t("ident.functions"), str(patterns.get("functions", 0)), GREEN),
+        (app.t("ident.doc_ratio"), f"{patterns.get('function_doc_ratio', 0)}", GREEN),
+        (app.t("ident.excvar"), str(patterns.get("exception_var", "e")), CYAN),
+    ]
+    app.ui.show_block(app.t("tbl.patterns"), rows)
     return CommandResult()
