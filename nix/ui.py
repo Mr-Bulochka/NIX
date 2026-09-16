@@ -730,9 +730,9 @@ class NixUI(App):
             root = self.query_one("#app")
         except Exception:
             return
-        root.set_class(w < 78, "resp-narrow")
-        root.set_class(h < 34, "resp-compact")
-        root.set_class(h < 18, "resp-tiny")
+        root.set_class(w < 70, "resp-narrow")
+        root.set_class(h < 22, "resp-compact")
+        root.set_class(h < 14, "resp-tiny")
 
     # ----- lifecycle -------------------------------------------------
 
