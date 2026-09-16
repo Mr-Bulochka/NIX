@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+import time
 
 from rich.text import Text
 
@@ -374,72 +375,81 @@ def _body_matrix(vm: dict, palette: dict, stage: str):
     return m
 
 
-def _face(m, vm: dict, genes: dict, pal: dict, mood: str, blink: bool):
+LOOKS = ("left", "straight", "right")
+
+
+def _paint_eyes(m, eyes, face_y, eye, glint, look, blink):
+    """Draw open eyes as 2-tall sockets with a glinting pupil.
+
+    *eyes* is a list of (start_x, width); the pupil (glint) travels
+    inside each socket along the gaze direction, so the pet visibly
+    looks left / straight / right.  Blink/tired/sleepy draw a closed
+    horizontal line instead.
+    """
+    def paint(x, y, color):
+        if 0 <= x < W and 0 <= y < H:
+            m[y][x] = color
+
+    if blink:
+        for start, width in eyes:
+            for x in range(start, start + width):
+                paint(x, face_y + 1, eye)
+        return
+
+    for start, width in eyes:
+        for yy in (face_y, face_y + 1):
+            for x in range(start, start + width):
+                paint(x, yy, eye)
+
+    if look == "left":
+        for start, _width in eyes:
+            paint(start, face_y, glint)
+    elif look == "right":
+        for start, width in eyes:
+            paint(start + width - 1, face_y, glint)
+    else:  # straight: wide open — both cells lit for 2-wide eyes
+        for start, width in eyes:
+            if width == 2:
+                paint(start, face_y, glint)
+                paint(start + width - 1, face_y, glint)
+            else:
+                paint(start + width // 2, face_y, glint)
+
+
+def idle_look(pet_seed: str, now: float | None = None) -> str:
+    """Deterministic per-pet glance schedule: the eyes dart side to
+    side every few seconds, mostly returning to straight ahead."""
+    if now is None:
+        now = time.time()
+    h = int.from_bytes(hashlib.sha256(pet_seed.encode("utf-8")).digest()[:8],
+                       "big")
+    step = 4.0 + (h % 40) / 10.0
+    bucket = int(now // step)
+    r = random.Random(h ^ (bucket * 0x9E3779B9 & 0xFFFFFFFF))
+    return r.choice(("left", "straight", "straight", "right", "straight"))
+
+
+def _face(m, vm: dict, genes: dict, pal: dict, mood: str, blink: bool,
+          look: str = "straight"):
     eye = EYES[genes["eye"]]
     glint = "#ffffff"
     face_y, mouth_y = vm["face_y"], vm["mouth_y"]
     cheeks_y = mouth_y - 1
+    closed = blink or mood in ("tired", "sleepy")
 
     def paint(x, y, color):
         if 0 <= x < W and 0 <= y < H:
             m[y][x] = color
 
     if vm.get("single_eye"):
-        # one big cyclops eye
-        if blink or mood in ("tired", "sleepy"):
-            for x in range(4, 8):
-                paint(x, face_y + 1, eye)
-        else:
-            for x in range(4, 8):
-                paint(x, face_y, eye)
-                paint(x, face_y + 1, eye)
-            paint(5, face_y, glint)
-            paint(6, face_y, glint)
+        _paint_eyes(m, [(4, 4)], face_y, eye, glint, look, closed)
         paint(2, cheeks_y, pal["cheek"])
         paint(9, cheeks_y, pal["cheek"])
         for x in (5, 6):
             paint(x, mouth_y, pal["outline"])
         return
 
-    if vm.get("pou_eyes"):
-        # Pou's small stretched eyes, like a piece of dough
-        if blink or mood in ("tired", "sleepy"):
-            for x in (3, 4):
-                paint(x, face_y + 1, eye)
-            for x in (8, 9):
-                paint(x, face_y + 1, eye)
-        else:
-            for yy in range(2):
-                for x in (3, 4):
-                    paint(x, face_y + yy, eye)
-                for x in (8, 9):
-                    paint(x, face_y + yy, eye)
-            paint(3, face_y, glint)
-            paint(9, face_y, glint)
-        paint(1, cheeks_y, pal["cheek"])
-        paint(10, cheeks_y, pal["cheek"])
-        for x in (5, 6):
-            paint(x, mouth_y, pal["outline"])
-        return
-
-    if blink or mood in ("tired", "sleepy"):
-        for x in (3, 4):
-            paint(x, face_y + 1, eye)
-        for x in (8, 9):
-            paint(x, face_y + 1, eye)
-    elif mood in ("alert", "focused"):
-        for x in (3, 4):
-            paint(x, face_y, eye)
-            paint(x, face_y, glint)
-        for x in (8, 9):
-            paint(x, face_y, eye)
-            paint(x, face_y, glint)
-    else:
-        paint(3, face_y, eye); paint(4, face_y, eye)
-        paint(8, face_y, eye); paint(9, face_y, eye)
-        paint(3, face_y, glint)
-        paint(8, face_y, glint)
-
+    _paint_eyes(m, [(3, 2), (8, 2)], face_y, eye, glint, look, closed)
     paint(1, cheeks_y, pal["cheek"])
     paint(10, cheeks_y, pal["cheek"])
 
@@ -491,7 +501,8 @@ def _to_text(m, scale: int) -> Text:
     return text
 
 
-def render(pet: dict, root, scale: int = 1, blink: bool = False) -> Text:
+def render(pet: dict, root, scale: int = 1, blink: bool = False,
+           look: str = "straight") -> Text:
     genes = genes_for(root, pet)
     variant = pet.get("skin")
     if variant not in VARIANT_KINDS:
@@ -503,5 +514,5 @@ def render(pet: dict, root, scale: int = 1, blink: bool = False) -> Text:
     vm = _variant(variant)
     palette = vm.get("palette") or PALETTES[genes["palette"]]
     m = _body_matrix(vm, palette, stage)
-    _face(m, vm, genes, palette, mood, blink)
+    _face(m, vm, genes, palette, mood, blink, look)
     return _to_text(m, scale)

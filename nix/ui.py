@@ -12,7 +12,8 @@ from textual.widgets import (
     Button, Footer, Header, Input, Label, RichLog, Select, Static, Switch,
 )
 
-from .avatar import genes_for as avatar_genes_for, render as render_avatar
+from .avatar import (genes_for as avatar_genes_for, render as render_avatar,
+                       idle_look)
 from .avatar import VARIANT_KINDS
 from .i18n import LANGUAGES, t as _t
 
@@ -824,7 +825,8 @@ class NixUI(App):
         pattern = pet.get("body_pattern", "seed")
         pattern_label = self._t(f"pet.pattern.{pattern}")
         blink = animate and self._blink == 1
-        art = render_avatar(pet, self.nix.root, scale=1, blink=blink)
+        look = idle_look(f"{self.nix.root}:{pet.get('name', 'pet')}")
+        art = render_avatar(pet, self.nix.root, scale=1, blink=blink, look=look)
         name = pet.get("name", "???")
         mood = pet.get("mood", "curious")
         mood_style = MOOD_STYLES.get(mood, FG)
@@ -984,8 +986,9 @@ class NixUI(App):
         mood_label = t(f"mood.{mood}")
         mood_style = MOOD_STYLES.get(mood, FG)
         pattern = pet.get("body_pattern", "seed")
+        look = idle_look(f"{self.nix.root}:{pet.get('name', 'pet')}")
         art = render_avatar(pet, self.nix.root, scale=2,
-                            blink=self._blink == 1)
+                            blink=self._blink == 1, look=look)
         t2 = Text()
         rows = [
             (t("pet.name"), pet.get("name", "???"), FG),
