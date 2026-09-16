@@ -480,21 +480,21 @@ def _to_text(m, scale: int) -> Text:
             t = top[x]
             b = (bot[x] if bot is not None else ".")
             if t != "." and b != ".":
-                seg = f"{t} on {b}"
+                glyph, seg = "\u2580", f"{t} on {b}"   # top half = fg
             elif t != ".":
-                seg = f"{t} on {BG}"
+                glyph, seg = "\u2580", f"{t} on {BG}"  # top half only
             elif b != ".":
-                seg = f"{b} on {BG}"
+                glyph, seg = "\u2584", f"{b} on {BG}"  # bottom half only
             else:
-                seg = ""
+                glyph, seg = " ", ""
             if scale >= 2:
                 if seg:
-                    text.append("\u2580\u2580", style=seg)
+                    text.append(glyph * 2, style=seg)
                 else:
                     text.append("  ")
             else:
                 if seg:
-                    text.append("\u2580", style=seg)
+                    text.append(glyph, style=seg)
                 else:
                     text.append(" ", style="")
         text.append("\n")
