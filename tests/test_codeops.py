@@ -173,5 +173,42 @@ class TestGit(unittest.TestCase):
                             for kind, _, text in self.p.seen))
 
 
+class TestRemote(unittest.TestCase):
+    def setUp(self):
+        self.p = _Rec()
+        self.p.root = Path(tempfile.mkdtemp())
+
+    def test_platform_detection(self):
+        from nix.git import platform_for_url
+        self.assertEqual(platform_for_url("git@github.com:a/x.git"), "github")
+        self.assertEqual(platform_for_url("https://gitlab.com/a/x.git"), "gitlab")
+        self.assertEqual(platform_for_url("git@gitlab.example.org:a/x.git"),
+                         "gitlab")
+        self.assertEqual(platform_for_url("https://example.com/a/x.git"), "other")
+        self.assertEqual(platform_for_url(""), "other")
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_remote_info_shows_platform_and_none_when_no_remote(self):
+        subprocess.run(["git", "init", "-q"], cwd=str(self.p.root), check=True)
+        _fire(self.p, "remote", ["info"])
+        self.assertTrue(any(kind == "message" and "no remotes" in text
+                            for kind, _, text in self.p.seen))
+        subprocess.run(["git", "remote", "add", "origin",
+                        "git@github.com:acme/x.git"],
+                       cwd=str(self.p.root), check=True)
+        _fire(self.p, "remote", ["info"])
+        self.assertIn("block", [kind for kind, *_ in self.p.seen])
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_remote_push_dry_run_no_network(self):
+        subprocess.run(["git", "init", "-q"], cwd=str(self.p.root), check=True)
+        subprocess.run(["git", "remote", "add", "origin",
+                        "https://github.com/acme/x.git"],
+                       cwd=str(self.p.root), check=True)
+        _fire(self.p, "remote", ["push"])
+        self.assertTrue(any(kind == "message" and "preview" in text
+                            for kind, _, text in self.p.seen))
+
+
 if __name__ == "__main__":
     unittest.main()

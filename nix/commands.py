@@ -204,7 +204,7 @@ def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
         (app.t("help.grp.pet"), ["pet", "pill", "settings", "tag"]),
         (app.t("help.grp.memory"), ["note", "memory", "journal"]),
         (app.t("help.grp.safety"), ["mode", "attempts", "save"]),
-        (app.t("help.grp.git"), ["git"]),
+        (app.t("help.grp.git"), ["git", "remote"]),
         (app.t("help.grp.system"), ["logs", "history", "checkpoint",
                                     "clear", "quit"]),
     ):
@@ -1226,6 +1226,124 @@ def cmd_git(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("SYSTEM", app.t("fb.git_committed", msg=msg))
         return CommandResult()
     app.ui.show_message("ERROR", app.t("fb.git_unknown_sub", sub=sub))
+    return CommandResult()
+
+
+@register("remote", "git remote bridge (GitHub/GitLab)",
+          "remote [info|fetch|pull|push|pr] [--apply]")
+def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
+    from .git import Git, RemoteCli, platform_for_url
+    flags, rest = parse_flags(args)
+    git = Git(app.root)
+    if not git.is_repo():
+        app.ui.show_message("ERROR", app.t("fb.git_not_repo"))
+        return CommandResult()
+    sub = rest[0] if rest else "info"
+    extra = rest[1:] if len(rest) > 1 else []
+    urls = git.remote_urls()
+    platform = platform_for_url(urls[0][1]) if urls else "other"
+
+    if sub == "info":
+        if not urls:
+            app.ui.show_message("SYSTEM", app.t("fb.remote_none"))
+            return CommandResult()
+        branch = git.branch()
+        rows = [
+            (app.t("ident.name"), urls[0][0], PURPLE),
+            (app.t("ident.url"), urls[0][1], FG),
+            (app.t("ident.branch"), branch, CYAN),
+            (app.t("tbl.platform"), platform, GREEN),
+        ]
+        ab = git.ahead_behind()
+        if ab is not None:
+            rows.append((app.t("tbl.remote_ab"),
+                         f"ahead {ab[0]} · behind {ab[1]}", GREEN))
+        app.ui.show_block(app.t("tbl.remote"), rows)
+        return CommandResult()
+
+    if sub == "fetch":
+        if not flags.get("apply"):
+            app.ui.show_message("SYSTEM", app.t("fb.remote_fetch_dry"))
+            return CommandResult()
+        res = git.fetch()
+        if not res.ok:
+            app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        app.journal.write("GIT", "remote fetch")
+        app.ui.show_message("SYSTEM", app.t("fb.remote_fetched"))
+        return CommandResult()
+
+    if sub == "pull":
+        ab = git.ahead_behind()
+        if not flags.get("apply"):
+            if ab is None:
+                app.ui.show_message("SYSTEM", app.t("fb.remote_no_upstream"))
+            else:
+                app.ui.show_message("SYSTEM", app.t(
+                    "fb.remote_pull_dry", back=str(ab[1])))
+            return CommandResult()
+        res = git.pull()
+        if not res.ok:
+            app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        app.journal.write("GIT", "remote pull")
+        app.ui.show_message("SYSTEM", app.t("fb.remote_pulled"))
+        return CommandResult()
+
+    if sub == "push":
+        branch = git.branch()
+        unsent = git.unsent_commits(branch)
+        rows = [
+            (app.t("ident.branch"), branch, PURPLE),
+            (app.t("ident.commits"), str(len(unsent)), CYAN),
+        ]
+        for line in unsent[:10]:
+            rows.append((line, "", DIM))
+        app.ui.show_block(app.t("tbl.remote"), rows)
+        if not flags.get("apply"):
+            app.ui.show_message("SYSTEM", app.t("fb.remote_push_dry"))
+            return CommandResult()
+        res = git.push(branch)
+        if not res.ok:
+            app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        app.journal.write("GIT", f"push {branch}")
+        app.ui.show_message("SYSTEM", app.t("fb.remote_pushed", branch=branch))
+        return CommandResult()
+
+    if sub in ("pr", "mr"):
+        if platform == "other":
+            app.ui.show_message("ERROR", app.t("fb.remote_no_platform"))
+            return CommandResult()
+        cli = RemoteCli(app.root, platform)
+        if not cli.available():
+            app.ui.show_message("ERROR", app.t("fb.remote_no_cli",
+                                               cli=cli.bin or "gh"))
+            return CommandResult()
+        title = " ".join(extra)
+        if title and flags.get("apply"):
+            res = cli.open_pr(title)
+            if not res.ok:
+                app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
+                return CommandResult()
+            app.journal.write("GIT", f"{sub}: {title}")
+            app.ui.show_message("SYSTEM", app.t("fb.remote_pr_opened", title=title))
+            return CommandResult()
+        if title:
+            app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+            return CommandResult()
+        res = cli.open_prs()
+        if not res.ok:
+            app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
+            return CommandResult()
+        lines = res.stdout.strip().splitlines()
+        if not lines:
+            app.ui.show_message("SYSTEM", app.t("fb.remote_no_prs"))
+        else:
+            app.ui.show_code(app.t("tbl.prs"), lines)
+        return CommandResult()
+
+    app.ui.show_message("ERROR", app.t("fb.remote_unknown_sub", sub=sub))
     return CommandResult()
 
 

@@ -97,6 +97,9 @@ generation work in a given language. Bundled modules live in
 | `git diff` | Change statistics |
 | `git branch` | Current branch |
 | `git commit [msg] [--apply]` | Stage all and commit; message auto-generated from diff (dry-run unless `--apply`) |
+| `remote info` | Show origin, platform (GitHub/GitLab/other), branch, ahead/behind |
+| `remote fetch` / `pull` / `push` | Remote sync, dry-run unless `--apply` |
+| `remote pr` | List open PRs/MRs via `gh`/`glab`; `remote pr "title" --apply` opens one |
 
 Module layout:
 

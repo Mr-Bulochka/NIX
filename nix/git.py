@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -83,6 +84,53 @@ class Git:
             })
         return out
 
+    # ---- remote ---------------------------------------------------------
+
+    def remote_name(self) -> str:
+        return self._run("remote", "get-url", "origin").stdout.strip()
+
+    def remote_urls(self) -> list[tuple[str, str]]:
+        """[(name, url)] via `git remote -v` (deduplicated fetch lines)."""
+        seen: dict[str, str] = {}
+        for line in self._run("remote", "-v").lines:
+            parts = line.split()
+            if len(parts) >= 3 and parts[2] == "(fetch)":
+                seen.setdefault(parts[0], parts[1])
+        return list(seen.items())
+
+    def ahead_behind(self) -> tuple[int, int] | None:
+        """(ahead, behind) vs upstream; None when no upstream tracked."""
+        res = self._run("rev-list", "--left-right", "--count", "HEAD...@{u}")
+        if not res.ok:
+            return None
+        parts = res.stdout.split()
+        if len(parts) != 2:
+            return None
+        try:
+            return int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+
+    def unsent_commits(self, branch: str) -> list[str]:
+        """Commits on *branch* not yet present on origin/<branch>."""
+        return self._run("log", "--oneline", "--no-decorate",
+                         f"origin/{branch}..{branch}").lines
+
+    def fetch(self) -> GitResult:
+        return self._run("fetch", "--all", "--prune")
+
+    def pull(self) -> GitResult:
+        res = self._run("pull", "--rebase")
+        if not res.ok:
+            # plain merge fallback
+            res = self._run("pull")
+        return res
+
+    def push(self, branch: str | None = None) -> GitResult:
+        if branch:
+            return self._run("push", "-u", "origin", branch)
+        return self._run("push")
+
     # ---- write ---------------------------------------------------------
 
     def add_all(self) -> GitResult:
@@ -113,3 +161,66 @@ class Git:
         detail = ", ".join(s["file"] for s in summary[:5])
         suffix = f" ({detail})" if len(summary) <= 5 else f" (+{len(summary) - 5} more)"
         return "nix: " + "; ".join(parts) + suffix if parts else "nix: update"
+
+
+def platform_for_url(url: str) -> str:
+    """Detect hosting platform from a remote url.
+
+    Returns "github", "gitlab" or "other".  Self-hosted instances count as
+    gitlab when the host contains "gitlab", otherwise "other".
+    """
+    if not url:
+        return "other"
+    low = url.lower()
+    if "gitlab" in low or "gl.example" in low:
+        return "gitlab"
+    if "github" in low or "gh.example" in low:
+        return "github"
+    m = re.search(r"@([^:/\s]+)[:/]", url)
+    host = m.group(1) if m else ""
+    if "gitlab" in host:
+        return "gitlab"
+    if "github" in host:
+        return "github"
+    return "other"
+
+
+class RemoteCli:
+    """Adapter over the hosting CLI (gh / glab).  Both produce a
+    feature-identical *list* of open PRs/MRs and can open a new one."""
+
+    BINS = {"github": "gh", "gitlab": "glab"}
+
+    def __init__(self, root, platform: str) -> None:
+        self.root = root
+        self.platform = platform
+        self.bin = self.BINS.get(platform)
+
+    def available(self) -> bool:
+        return bool(self.bin) and shutil.which(self.bin) is not None
+
+    def _run(self, *args: str) -> GitResult:
+        if not self.bin:
+            return GitResult(ok=False, stderr="no cli")
+        try:
+            p = subprocess.run([self.bin, *args],
+                               cwd=str(self.root),
+                               capture_output=True, text=True, timeout=15)
+            return GitResult(ok=(p.returncode == 0),
+                             stdout=p.stdout, stderr=p.stderr)
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            return GitResult(ok=False, stderr=str(exc))
+
+    def open_prs(self) -> GitResult:
+        if self.platform == "github":
+            return self._run("pr", "list", "--state", "open",
+                             "--limit", "20")
+        return self._run("mr", "list", "--state", "opened",
+                         "--limit", "20")
+
+    def open_pr(self, title: str) -> GitResult:
+        if self.platform == "github":
+            return self._run("pr", "create", "--title", title,
+                             "--body", "Created by NIX")
+        return self._run("mr", "create", "--title", title,
+                         "--yes")

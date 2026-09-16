@@ -65,7 +65,8 @@ class TestCommands(unittest.TestCase):
         for name in ("pill", "tree", "ls", "lang", "tests", "deps", "find",
                      "todo", "note", "memory", "journal", "tag",
                      "checkpoint", "save", "echo", "time", "which", "stats",
-                     "module", "defs", "blocks", "wrap", "gen", "ident"):
+                     "module", "defs", "blocks", "wrap", "gen", "ident",
+                     "rename", "git", "remote"):
             self.assertIn(name, COMMANDS)
 
     def test_get_command(self):
