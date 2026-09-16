@@ -91,6 +91,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.remote_ab": "Ahead/Behind",
         "tbl.prs": "Open PRs",
         "modal.close": "Close (Esc)",
+        "set.apply": "Apply",
         "set.saved": "Settings saved",
 
         # status rows
@@ -152,6 +153,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "on": "on",
         "off": "off",
         "set.language": "Language",
+
+        # settings field validation
+        "fb.int_invalid": "enter a whole number",
 
         # scan
         "scan.files": "files",
@@ -402,6 +406,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.remote_ab": "Впереди/Позади",
         "tbl.prs": "Открытые PR",
         "modal.close": "Закрыть (Esc)",
+        "set.apply": "Применить",
         "set.saved": "Настройки сохранены",
 
         # status rows
@@ -463,6 +468,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "on": "вкл",
         "off": "выкл",
         "set.language": "Язык",
+
+        # settings field validation
+        "fb.int_invalid": "введите целое число",
 
         # scan
         "scan.files": "файлов",

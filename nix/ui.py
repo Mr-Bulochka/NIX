@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import fields
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -109,12 +111,13 @@ Screen {{
     text-style: bold;
     color: {CYAN};
     margin-top: 0;
+    width: auto;
 }}
 
 #pet-stats {{
     width: auto;
     height: auto;
-    padding: 1 1;
+    padding: 1 2;
     margin-left: 2;
     border: round {BORDER};
     background: {PANEL};
@@ -127,6 +130,7 @@ Screen {{
 
 #logwrap {{
     height: 1fr;
+    min-height: 3;
     margin: 1 2 0 2;
 }}
 
@@ -200,6 +204,7 @@ Header {{
 
 Header .header--title {{
     color: {FG};
+    text-style: bold;
 }}
 
 Header .header--clock {{
@@ -219,6 +224,41 @@ Scrollbar:hover {{
 .Selection {{
     background: {RAISED};
     color: {BLUE};
+}}
+"""
+
+# Responsive tuning applied dynamically from on_resize:
+#  * #app.resp-narrow => hide side panel on small widths
+#  * #app.resp-compact => drop the pet stage header on short heights
+#  * #app.resp-tiny   => focus purely on the log on very small windows
+
+RESP_CSS = f"""
+#app.resp-narrow #pet-stats {{
+    display: none;
+}}
+
+#app.resp-narrow #pet-wrap {{
+    padding: 0;
+}}
+
+#app.resp-narrow #top-pet-name {{
+    max-width: 100%;
+}}
+
+#app.resp-compact #top {{
+    display: none;
+}}
+
+#app.resp-compact #toolbar {{
+    display: none;
+}}
+
+#app.resp-tiny #top {{
+    display: none;
+}}
+
+#app.resp-tiny #toolbar {{
+    display: none;
 }}
 """
 
@@ -353,8 +393,8 @@ class FirstLaunchScreen(ModalScreen[dict]):
 
 class SettingsModal(ModalScreen[None]):
     BINDINGS = [
-        Binding("escape", "save_and_close", "Close", priority=True),
-        Binding("ctrl+q", "save_and_close", "", priority=True),
+        Binding("escape", "close_settings", "Close", priority=True),
+        Binding("ctrl+q", "close_settings", "", priority=True),
     ]
 
     TOGGLE_KEYS = {
@@ -376,7 +416,7 @@ class SettingsModal(ModalScreen[None]):
         width: 88%;
         max-width: 84;
         height: 88%;
-        max-height: 46;
+        max-height: 50;
         border: round {BORDER};
         background: {PANEL};
         padding: 0 1;
@@ -438,18 +478,31 @@ class SettingsModal(ModalScreen[None]):
         color: {DIM};
     }}
 
-    #set-close {{
+    #set-footer {{
         dock: bottom;
-        width: 100%;
+        height: auto;
         margin: 1 0 1 0;
+        align-horizontal: right;
+    }}
+
+    #set-footer .set-btn {{
+        min-width: 12;
+        margin-left: 1;
         background: {RAISED};
         border: round {BORDER};
         color: {FG};
     }}
 
-    #set-close:hover {{
+    #set-footer .set-btn:hover {{
         border: round {BLUE};
         color: {BLUE};
+    }}
+
+    #set-apply {{
+        background: {BLUE};
+        border: round {BLUE};
+        color: {BLACK};
+        text-style: bold;
     }}
 
     Select {{
@@ -484,7 +537,9 @@ class SettingsModal(ModalScreen[None]):
         super().__init__()
         self._ui = ui
         self._cfg = config
+        self._draft = copy.copy(config)
         self._save = save
+        self._input_ready = False
 
     def _t(self, key: str, **kw) -> str:
         return self._ui._t(key, **kw)
@@ -498,7 +553,7 @@ class SettingsModal(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         t = self._t
-        cfg = self._cfg
+        draft = self._draft
         with Vertical(id="set-frame"):
             yield Label(t("tbl.settings"), id="set-title")
             with VerticalScroll(id="set-body"):
@@ -506,7 +561,7 @@ class SettingsModal(ModalScreen[None]):
                     t("set.language"),
                     Select(
                         [(LANGUAGES[k], k) for k in LANGUAGES],
-                        value=cfg.language,
+                        value=draft.language,
                         id="set-lang",
                     ),
                 )
@@ -514,7 +569,7 @@ class SettingsModal(ModalScreen[None]):
                     t("st.mode"),
                     Select(
                         [(t(f"cmd.mode.{m}"), m) for m in MODES],
-                        value=cfg.mode,
+                        value=draft.mode,
                         id="set-mode",
                     ),
                 )
@@ -528,18 +583,20 @@ class SettingsModal(ModalScreen[None]):
                 )
                 yield self._row(
                     t("set.attempts"),
-                    Input(str(cfg.attempts), id="set-attempts"),
+                    Input(str(draft.attempts), id="set-attempts"),
                 )
                 yield self._row(
                     t("set.mutation_budget"),
-                    Input(str(cfg.mutation_budget), id="set-budget"),
+                    Input(str(draft.mutation_budget), id="set-budget"),
                 )
                 for wid, key in self.TOGGLE_KEYS.items():
                     yield self._row(
                         t(self._toggle_label(wid)),
-                        Switch(getattr(cfg, key), id=wid),
+                        Switch(getattr(draft, key), id=wid),
                     )
-            yield Button("", id="set-close")
+            with Horizontal(id="set-footer"):
+                yield Button("", id="set-close", classes="set-btn")
+                yield Button("", id="set-apply")
 
     def _toggle_label(self, wid: str) -> str:
         return self._t({
@@ -554,7 +611,9 @@ class SettingsModal(ModalScreen[None]):
 
     def on_mount(self) -> None:
         self.query_one("#set-close", Button).label = self._t("modal.close")
+        self.query_one("#set-apply", Button).label = self._t("set.apply")
         self._update_pill()
+        self._input_ready = True
 
     def _update_pill(self) -> None:
         t = self._t
@@ -576,47 +635,46 @@ class SettingsModal(ModalScreen[None]):
             btn.label = t("set.pill_give")
             btn.disabled = False
 
-    def _persist(self, message: str) -> None:
-        self._save(self._cfg)
-        self._ui._refresh_pet()
-        if message:
-            self.notify(message, severity="information", timeout=2)
-
     def on_select_changed(self, event) -> None:
+        if not self._input_ready:
+            return
         wid = getattr(event.select, "id", "")
         if wid == "set-lang":
-            self._cfg.language = event.value
-            self._persist(self._t("set.saved"))
+            self._draft.language = event.value
         elif wid == "set-mode":
-            self._cfg.mode = event.value
-            self._persist(self._t("set.saved"))
-        self._ui._refresh_header()
+            self._draft.mode = event.value
 
     def on_input_submitted(self, event) -> None:
+        if not self._input_ready:
+            return
         wid = getattr(event.input, "id", "")
         raw = event.value.strip()
         try:
             val = int(raw)
         except ValueError:
-            self.notify(self._t("fb.attempts_invalid"), severity="error")
+            self.notify(self._t("fb.int_invalid"), severity="error")
             return
         if wid == "set-attempts":
-            self._cfg.attempts = max(0, min(val, self._cfg.max_attempts))
+            self._draft.attempts = max(0, min(val, self._cfg.max_attempts))
         elif wid == "set-budget":
-            self._cfg.mutation_budget = max(0, val)
-        self._persist(self._t("set.saved"))
+            self._draft.mutation_budget = max(0, val)
 
     def on_switch_changed(self, event) -> None:
+        if not self._input_ready:
+            return
         key = self.TOGGLE_KEYS.get(getattr(event.switch, "id", ""))
         if key:
-            setattr(self._cfg, key, event.value)
-            self._persist(self._t("set.saved"))
+            setattr(self._draft, key, event.value)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if getattr(event.button, "id", "") == "set-close":
-            self.action_save_and_close()
+        wid = getattr(event.button, "id", "")
+        if wid == "set-apply":
+            self.action_apply_settings()
             return
-        if getattr(event.button, "id", "") != "set-pill":
+        if wid == "set-close":
+            self.action_close_settings()
+            return
+        if wid != "set-pill":
             return
         ok, message = self._ui.nix.give_pill()
         self._ui._refresh_pet()
@@ -624,11 +682,25 @@ class SettingsModal(ModalScreen[None]):
                     timeout=4)
         self._update_pill()
 
-    def action_save_and_close(self) -> None:
-        self._save(self._cfg)
+    def action_apply_settings(self) -> None:
+        self._apply()
         self._ui._refresh_pet()
         self._ui._refresh_header()
         self.dismiss(None)
+
+    def action_close_settings(self) -> None:
+        self.dismiss(None)
+
+    def _apply(self) -> None:
+        for f in fields(self._cfg):
+            setattr(self._cfg, f.name, getattr(self._draft, f.name))
+        self._save(self._cfg)
+        self._ui._apply_language()
+        self._ui._refresh_pet()
+        self._ui._refresh_header()
+
+    def on_unmount(self) -> None:
+        self._input_ready = False
 
 
 class NixUI(App):
@@ -644,13 +716,23 @@ class NixUI(App):
                 show=False),
     ]
 
-    CSS = APP_CSS
+    CSS = APP_CSS + RESP_CSS
 
     def __init__(self, nix: "NixApp") -> None:
         super().__init__()
         self.nix = nix
         self._spin = 0
         self._blink = 0
+
+    def on_resize(self, event) -> None:
+        w, h = event.size.width, event.size.height
+        try:
+            root = self.query_one("#app")
+        except Exception:
+            return
+        root.set_class(w < 78, "resp-narrow")
+        root.set_class(h < 34, "resp-compact")
+        root.set_class(h < 18, "resp-tiny")
 
     # ----- lifecycle -------------------------------------------------
 

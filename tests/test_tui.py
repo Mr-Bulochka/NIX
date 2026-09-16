@@ -174,6 +174,73 @@ class TestTUI(unittest.TestCase):
                 await pilot.pause(0.3)
         self._run(scenario())
 
+    def test_settings_no_autosave_until_apply(self):
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            saved = []
+            orig = self.app.config_store.save
+
+            def spy(cfg):
+                saved.append(cfg)
+                return orig(cfg)
+
+            self.app.config_store.save = spy
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                saved.clear()  # ignore the pet-creation save
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                assert saved == []  # nothing saved on open
+                mode = pilot.app.screen.query_one("#set-mode")
+                mode.value = "safe"
+                await pilot.pause(0.3)
+                assert saved == []  # still nothing while editing
+                assert self.app.config.mode != "safe"
+                await pilot.click("#set-apply")
+                await pilot.pause(0.5)
+                assert len(saved) == 1  # exactly one save on apply
+                assert self.app.config.mode == "safe"
+                assert not isinstance(pilot.app.screen, SettingsModal)
+        self._run(scenario())
+
+    def test_settings_close_without_apply_discards(self):
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            saved = []
+            orig = self.app.config_store.save
+
+            def spy(cfg):
+                saved.append(cfg)
+                return orig(cfg)
+
+            self.app.config_store.save = spy
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                saved.clear()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                mode = pilot.app.screen.query_one("#set-mode")
+                mode.value = "git"
+                await pilot.pause(0.3)
+                await pilot.click("#set-close")
+                await pilot.pause(0.5)
+                assert saved == []
+                assert self.app.config.mode != "git"
+        self._run(scenario())
+
 
 if __name__ == "__main__":
     unittest.main()
