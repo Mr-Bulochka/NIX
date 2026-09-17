@@ -1037,7 +1037,7 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
             value = "-> " + value
         ret = " " + value
     params = str(flags.get("params", ""))
-    if params and "," not in params and re.search(r"\s", params):
+    if params and "," not in params and ":" not in params and re.search(r"\s", params):
         params = re.sub(r"\s+", ", ", params).strip()
     body = str(flags.get("body", "pass"))
     if body.strip().lower() == "auto":
@@ -1179,7 +1179,7 @@ def cmd_rename(app: "NixApp", args: list[str]) -> CommandResult:
         if p is not None:
             paths = [p]
     else:
-        index, _ = app.brain.ensure()
+        index = app.brain.build()
         seen: set[str] = set()
         for sym in index.get("symbols", []):
             seen.add(sym["file"])
@@ -1571,10 +1571,13 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
 
     if target.lower() == "all":
         filtered = symbols
+        module_name = "project"
     else:
-        stem = Path(target).stem
+        stem = Path(target).stem.lower()
         filtered = [s for s in symbols
-                    if Path(s.get("file", "")).stem == stem]
+                    if Path(s.get("file", "")).stem.lower() == stem]
+        module_name = (Path(filtered[0]["file"]).stem
+                       if filtered else Path(target).stem)
 
     if not filtered:
         app.ui.show_message("ERROR",
@@ -1615,7 +1618,6 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.testgen_no_template"))
         return CommandResult()
 
-    module_name = Path(target).stem if target.lower() != "all" else "project"
     test_code = render_testgen(mod, filtered, module_name)
 
     app.ui.show_message("TESTGEN", app.t("fb.testgen_preview", target=target))
@@ -1688,10 +1690,14 @@ def cmd_recipe(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_message("RECIPE", app.t("fb.recipe_run", name=name))
 
     # split by semicolons and execute each step
+    from .app import _tokenize_nix
     steps = [s.strip() for s in cmd_str.split(";") if s.strip()]
     for i, step in enumerate(steps, 1):
         app.ui.show_message("STEP", app.t("fb.recipe_step", i=i, cmd=step))
-        parts = step.split()
+        tokens = _tokenize_nix(step)
+        parts = [v for k, v in tokens if k == "arg"]
+        if not parts:
+            continue
         cmd_name = parts[0]
         cmd_args = parts[1:]
         if apply:

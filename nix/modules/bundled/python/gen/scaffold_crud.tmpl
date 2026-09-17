@@ -6,7 +6,7 @@ def create_{{snake}}({{create_params}}) -> {{Ent}}:
 
 
 def get_{{snake}}({{pk_name}}: {{pk_type}}) -> {{Ent}} | None:
-    """Retrieve a {{Ent}} by its primary key."""
+    """Retrieve {{article}} {{Ent}} by its primary key."""
     return next((x for x in _{{upper}}_STORE if x.{{pk_name}} == {{pk_name}}), None)
 
 
@@ -27,7 +27,7 @@ def update_{{snake}}({{pk_name}}: {{pk_type}}, **kwargs) -> {{Ent}} | None:
 
 
 def delete_{{snake}}({{pk_name}}: {{pk_type}}) -> bool:
-    """Delete a {{Ent}} by its primary key."""
+    """Delete {{article}} {{Ent}} by its primary key."""
     item = get_{{snake}}({{pk_name}})
     if item is None:
         return False

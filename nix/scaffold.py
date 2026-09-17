@@ -161,6 +161,9 @@ def build_slots(entity: str, columns: list[Column],
     # docstring
     docstring = ""
 
+    # article for prose ("an Order" vs "a Widget")
+    article = "an" if ent[:1].lower() in "aeiou" else "a"
+
     return {
         "Ent": ent,
         "snake": snake,
@@ -177,6 +180,7 @@ def build_slots(entity: str, columns: list[Column],
         "test_pk_miss": test_pk_miss,
         "test_update_kw": test_update_kw,
         "docstring": docstring,
+        "article": article,
     }
 
 
