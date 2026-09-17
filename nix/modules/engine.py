@@ -133,24 +133,23 @@ def apply_wrap(lines: list[str], block: Block, op_def: dict,
     tail = lines[block.end:]
 
     inner = int(op_def.get("inner_indent", 4))
-    ws = " " * (block.indent + inner)
-    ws_len = len(ws)
     bi = block.indent
+
+    def op_line(ln: str) -> str:
+        fill = " " * (bi + inner + leading_ws(ln)) + ln.strip()
+        return fill_slots(fill, merged)
 
     out_body: list[str] = []
     for line in body_lines:
         if not line.strip() and not out_body:
             continue  # drop leading blank lines inside the body
-        if len(line) >= bi:
-            inner_text = line[bi:]
-        else:
-            inner_text = line.lstrip()
-        out_body.append(ws + inner_text)
+        if not line.strip():
+            out_body.append("")
+            continue
+        out_body.append(" " * (leading_ws(line) + inner) + line.strip())
 
-    before = [fill_slots(" " * block.indent + ln, merged)
-              for ln in op_def.get("before", [])]
-    after = [fill_slots(" " * block.indent + ln, merged)
-             for ln in op_def.get("after", [])]
+    before = [op_line(ln) for ln in op_def.get("before", [])]
+    after = [op_line(ln) for ln in op_def.get("after", [])]
 
     return list(head) + before + out_body + after + list(tail)
 

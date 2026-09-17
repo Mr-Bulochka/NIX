@@ -125,6 +125,32 @@ class TestGenWrite(unittest.TestCase):
         self.assertIn("def feature()", text)
         self.assertTrue(list((self.p.state.nix / "brain" / "backups").glob("*-gen-*")))
 
+    def test_gen_end_insert_before_main_guard(self):
+        target = self.p.root / "core.py"
+        target.write_text('def main():\n    pass\n\n\nif __name__ == "__main__":\n    main()\n',
+                          encoding="utf-8")
+        _fire(self.p, "gen", [
+            "function", "bootstrap", "--into", "core.py",
+            "--apply", "--doc", "entry",
+        ])
+        text = target.read_text(encoding="utf-8")
+        guard = text.index('if __name__ == "__main__":')
+        fn = text.index("def bootstrap()")
+        self.assertLess(fn, guard)  # must land before the main guard
+        compile(text, "core.py", "exec")  # and stay valid Python
+
+    def test_gen_multi_word_params(self):
+        target = self.p.root / "core.py"
+        target.write_text("x = 1\n", encoding="utf-8")
+        _fire(self.p, "gen", [
+            "function", "divmod2", "--into", "core.py", "--apply",
+            "--params", "a", "b", "--ret", "tuple", "--doc", "returns pair",
+        ])
+        text = target.read_text(encoding="utf-8")
+        self.assertIn("def divmod2(a, b) -> tuple:", text)
+        self.assertIn('"""returns pair"""', text)
+        compile(text, "core.py", "exec")
+
 
 class TestRename(unittest.TestCase):
     def setUp(self):
@@ -208,6 +234,33 @@ class TestRemote(unittest.TestCase):
         _fire(self.p, "remote", ["push"])
         self.assertTrue(any(kind == "message" and "preview" in text
                             for kind, _, text in self.p.seen))
+
+
+class TestDiffSummary(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.p = _Rec()
+        self.p.root = Path(tempfile.mkdtemp())
+
+    def test_regex_accepts_real_git_stat_lines(self):
+        from nix.git import Git
+        git = Git(self.p.root)
+        git.diff_stat = lambda cached=True: [
+            " core.py | 3 ++-",
+            " new.py   | 5 +++++",
+            " old.py   | 2 --",
+            " bin.png  | Bin 0 -> 12 bytes",
+        ]
+        summary = git.diff_summary()
+        by_file = {s["file"]: s for s in summary}
+        self.assertEqual(by_file["core.py"]["insertions"], 2)
+        self.assertEqual(by_file["core.py"]["deletions"], 1)
+        self.assertEqual(by_file["new.py"]["insertions"], 5)
+        self.assertEqual(by_file["new.py"]["deletions"], 0)
+        self.assertEqual(by_file["old.py"]["insertions"], 0)
+        self.assertEqual(by_file["old.py"]["deletions"], 2)
+        self.assertTrue(by_file["bin.png"].get("binary"))
 
 
 if __name__ == "__main__":

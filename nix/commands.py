@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from .scanner import IGNORED_DIRS
 from .avatar import VARIANT_KINDS
+from .modules.engine import leading_ws
 
 FG = "#c7ccd4"
 CYAN = "#85d3f5"
@@ -70,7 +71,7 @@ def get_all_commands() -> dict[str, Command]:
 # Separate several commands on one line with ';' or '&&'.
 
 
-def parse_flags(args: list[str]) -> tuple[dict[str, str | bool], list[str]]:
+def parse_flags(args: list[str], multi: tuple[str, ...] = ()) -> tuple[dict[str, str | bool], list[str]]:
     flags: dict[str, str | bool] = {}
     rest: list[str] = []
     i = 0
@@ -83,8 +84,17 @@ def parse_flags(args: list[str]) -> tuple[dict[str, str | bool], list[str]]:
                 flags[k] = v
             else:
                 if i + 1 < len(args) and not args[i + 1].startswith("-"):
-                    flags[body] = args[i + 1]
-                    i += 1
+                    if body in multi:
+                        parts = [args[i + 1]]
+                        j = i + 2
+                        while j < len(args) and not args[j].startswith("-"):
+                            parts.append(args[j])
+                            j += 1
+                        flags[body] = " ".join(parts)
+                        i = j - 1
+                    else:
+                        flags[body] = args[i + 1]
+                        i += 1
                 else:
                     flags[body] = True
         elif a.startswith("-") and len(a) > 1 and not a[1:].lstrip("+-").isdigit():
@@ -906,7 +916,7 @@ def cmd_blocks(app: "NixApp", args: list[str]) -> CommandResult:
 def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
     from .modules import module_for_file, load_module
     from .modules.engine import find_block_at_line, apply_wrap
-    flags, rest = parse_flags(args)
+    flags, rest = parse_flags(args, multi=("cond",))
     if len(rest) < 2 or "in" not in rest:
         app.ui.show_message("ERROR", app.t("fb.wrap_usage"))
         return CommandResult()
@@ -982,9 +992,10 @@ def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
           "[--apply] [--params .. --ret .. --doc .. --body ..] [--lang python]")
 def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
     from .modules import load_module
-    from .modules.engine import render_template, leading_ws
+    from .modules.engine import render_template
     import hashlib
-    flags, rest = parse_flags(args)
+    flags, rest = parse_flags(args, multi=("params", "doc", "body", "base",
+                                           "cond"))
     if len(rest) < 2:
         app.ui.show_message("ERROR", app.t("fb.gen_usage"))
         return CommandResult()
@@ -1016,6 +1027,8 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
             value = "-> " + value
         ret = " " + value
     params = str(flags.get("params", ""))
+    if params and "," not in params and re.search(r"\s", params):
+        params = re.sub(r"\s+", ", ", params).strip()
     body = str(flags.get("body", "pass"))
     slots = {
         "name": name, "params": params, "ret": ret,
@@ -1056,14 +1069,24 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
         new_lines = orig_lines[:insert_idx] + \
             [ln + "\n" for ln in indented] + orig_lines[insert_idx:]
     else:
+        guard_idx = _trailing_guard_index(orig_lines)
         anchor_indent = 0
-        for i in range(len(orig_lines) - 1, -1, -1):
-            if orig_lines[i].strip():
-                anchor_indent = leading_ws(orig_lines[i])
-                break
+        if guard_idx is None:
+            for ln in orig_lines:
+                if ln.strip():
+                    ws = leading_ws(ln)
+                    if anchor_indent == 0 and ws == 0:
+                        break
+                    if 0 < ws < anchor_indent or (anchor_indent == 0 and ws > 0):
+                        anchor_indent = ws
         indented = _indent_lines(snippet_lines, anchor_indent)
-        sep = ["\n"] if orig_lines and orig_lines[-1].strip() else []
-        new_lines = orig_lines + sep + [ln + "\n" for ln in indented]
+        if guard_idx is not None:
+            block = [ln + "\n" for ln in indented]
+            new_lines = orig_lines[:guard_idx] + \
+                ["\n"] + block + ["\n"] + orig_lines[guard_idx:]
+        else:
+            sep = ["\n"] if orig_lines and orig_lines[-1].strip() else []
+            new_lines = orig_lines + sep + [ln + "\n" for ln in indented]
     preview = _indent_lines(snippet_lines, anchor_indent)
     app.ui.show_code(f"{gtype}: {name} → {path.name}", preview)
     if not flags.get("apply"):
@@ -1093,6 +1116,26 @@ def _indent_lines(lines: list[str], n: int) -> list[str]:
     """Indent non-empty lines by *n* spaces, keeping existing content."""
     pad = " " * n
     return [(pad + ln if ln.strip() else ln) for ln in lines]
+
+
+def _trailing_guard_index(lines: list[str]) -> int | None:
+    """Index of a trailing block like ``if __name__ == "__main__":``.
+
+    Returns the 0-based index of the guard header, or None when the file
+    does not end with one.  Generated top-level code is inserted before
+    such a guard so it lands in module scope instead of inside it.
+    """
+    n = len(lines)
+    for i in range(n - 1, -1, -1):
+        if not lines[i].strip():
+            continue
+        if leading_ws(lines[i]) != 0:
+            continue
+        s = lines[i].strip()
+        if s.startswith("if __name__") or s.startswith("if _name_ == "):
+            return i
+        return None
+    return None
 
 
 @register("rename", "project-wide symbolic rename",

@@ -118,6 +118,22 @@ class TestEngineOps(unittest.TestCase):
         out = apply_wrap(lines, fn, mod.ops["wrap-in-try"])
         self.assertIn("except Exception as e:", "\n".join(out))
 
+    def test_wrap_indents_are_valid_python(self):
+        lines = (
+            "def foo(x):\n"
+            "    if x > 0:\n"
+            "        return x\n"
+            "    return -x\n"
+        ).splitlines()
+        mod = load_module("python")
+        fn = scan_blocks(lines, "function", mod.blocks["function"])[0]
+        out = apply_wrap(lines, fn, mod.ops["wrap-in-try"])
+        self.assertEqual(out[0], "def foo(x):")
+        self.assertEqual(out[1], "    try:")
+        self.assertEqual(out[2], "        if x > 0:")
+        self.assertEqual(out[3], "            return x")
+        compile("\n".join(out), "<x>", "exec")
+
     def test_render_template_drops_empty_slots(self):
         mod = load_module("python")
         rendered = render_template(mod.gen["function"], {

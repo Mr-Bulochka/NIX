@@ -69,18 +69,23 @@ class Git:
         """Parsed diff --stat lines into {file, insertions, deletions}."""
         out: list[dict] = []
         for line in self.diff_stat():
-            m = re.match(r"\s*([^|]+)\|\s*(\d+)\s*(\+?)\s*(\d*)\s*(-?)",
-                         line)
+            m = re.match(r"\s*([^|]+)\|\s*(\d+)\s*(\+*-*)\s*$", line.strip())
             if not m:
+                if "Bin" in line:
+                    file_ = line.split("|")[0].strip()
+                    out.append({"file": file_, "binary": True})
                 continue
             file_ = m.group(1).strip()
-            if "Bin" in line:
-                out.append({"file": file_, "binary": True})
-                continue
+            total = int(m.group(2))
+            marks = m.group(3) or ""
+            inserts = marks.count("+")
+            deletes = marks.count("-")
+            if not marks:
+                inserts, deletes = total, 0
             out.append({
                 "file": file_,
-                "insertions": int(m.group(2)) if m.group(3) == "+" else 0,
-                "deletions": int(m.group(4)) if m.group(5) == "-" else 0,
+                "insertions": inserts,
+                "deletions": deletes,
             })
         return out
 
