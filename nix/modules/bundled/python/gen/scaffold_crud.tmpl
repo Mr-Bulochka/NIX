@@ -1,0 +1,35 @@
+def create_{{snake}}({{create_params}}) -> {{Ent}}:
+    """Create a new {{Ent}} and add it to the store."""
+    item = {{Ent}}({{create_call}})
+    _{{upper}}_STORE.append(item)
+    return item
+
+
+def get_{{snake}}({{pk_name}}: {{pk_type}}) -> {{Ent}} | None:
+    """Retrieve a {{Ent}} by its primary key."""
+    return next((x for x in _{{upper}}_STORE if x.{{pk_name}} == {{pk_name}}), None)
+
+
+def list_{{snake}}() -> list[{{Ent}}]:
+    """List all {{Ent}} items."""
+    return list(_{{upper}}_STORE)
+
+
+def update_{{snake}}({{pk_name}}: {{pk_type}}, **kwargs) -> {{Ent}} | None:
+    """Update fields of an existing {{Ent}}."""
+    item = get_{{snake}}({{pk_name}})
+    if item is None:
+        return None
+    for key, value in kwargs.items():
+        if hasattr(item, key):
+            setattr(item, key, value)
+    return item
+
+
+def delete_{{snake}}({{pk_name}}: {{pk_type}}) -> bool:
+    """Delete a {{Ent}} by its primary key."""
+    item = get_{{snake}}({{pk_name}})
+    if item is None:
+        return False
+    _{{upper}}_STORE.remove(item)
+    return True

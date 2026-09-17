@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -209,8 +211,9 @@ def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
         (app.t("help.grp.project"),
          ["scan", "status", "stats", "tree", "ls", "lang", "tests",
           "deps", "find", "todo"]),
-        (app.t("help.grp.code"),
-         ["module", "defs", "blocks", "wrap", "gen", "rename", "ident"]),
+         (app.t("help.grp.code"),
+          ["module", "defs", "blocks", "wrap", "gen", "rename", "ident",
+           "make", "testgen", "recipe"]),
         (app.t("help.grp.pet"), ["pet", "pill", "settings", "tag"]),
         (app.t("help.grp.memory"), ["note", "memory", "journal"]),
         (app.t("help.grp.safety"), ["mode", "attempts", "save"]),
@@ -1030,6 +1033,9 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
     if params and "," not in params and re.search(r"\s", params):
         params = re.sub(r"\s+", ", ", params).strip()
     body = str(flags.get("body", "pass"))
+    if body.strip().lower() == "auto":
+        from .body import infer_body
+        body = infer_body(name, params, ret)
     slots = {
         "name": name, "params": params, "ret": ret,
         "docstring": docstring, "body": body,
@@ -1407,4 +1413,244 @@ def cmd_ident(app: "NixApp", args: list[str]) -> CommandResult:
         (app.t("ident.excvar"), str(patterns.get("exception_var", "e")), CYAN),
     ]
     app.ui.show_block(app.t("tbl.patterns"), rows)
+    return CommandResult()
+
+
+# ---- scaffolding ---------------------------------------------------
+
+
+@register("make", "scaffold a feature: model + CRUD + tests",
+          "make <entity> [--cols name:str:pk,age:int] [--into file] [--apply]")
+def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
+    from .scaffold import parse_columns, render_scaffold
+    from .modules.loader import module_for_file, all_modules
+
+    flags, rest = parse_flags(args)
+
+    if not rest:
+        app.ui.show_message("ERROR", app.t("fb.make_no_entity"))
+        return CommandResult()
+
+    entity = rest[0]
+    cols_spec = flags.get("cols", "name:str:pk")
+    columns = parse_columns(cols_spec)
+    into = flags.get("into", "")
+    test_into = flags.get("test-into", "")
+    apply = bool(flags.get("apply"))
+    lang = flags.get("lang", "")
+
+    # resolve module
+    mod = None
+    if lang:
+        for m in all_modules():
+            if m.id == lang:
+                mod = m
+                break
+    elif into:
+        ext = Path(into).suffix
+        for m in all_modules():
+            if ext in m.extensions:
+                mod = m
+                break
+    if mod is None:
+        for m in all_modules():
+            mod = m
+            break
+
+    if mod is None:
+        app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
+        return CommandResult()
+
+    if "scaffold_model" not in mod.gen:
+        app.ui.show_message("ERROR",
+                            app.t("fb.make_no_gen", mod=mod.id))
+        return CommandResult()
+
+    module_name = Path(into).stem if into else entity
+    parts = render_scaffold(mod, entity, columns, module_name)
+    if not parts:
+        app.ui.show_message("ERROR",
+                            app.t("fb.make_no_gen", mod=mod.id))
+        return CommandResult()
+
+    # model + crud combined
+    model_code = parts.get("model", "") + "\n\n\n" + parts.get("crud", "")
+    test_code = parts.get("test", "")
+
+    app.ui.show_message("SCAFFOLD", app.t("fb.make_preview_model"))
+    app.ui.show_code(app.t("tbl.scaffold"), [model_code])
+    if test_code:
+        app.ui.show_message("SCAFFOLD", app.t("fb.make_preview_test"))
+        app.ui.show_code(app.t("tbl.scaffold"), [test_code])
+
+    if not apply:
+        app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+        return CommandResult()
+
+    # write model + crud
+    if into:
+        _write_feature(app, into, model_code)
+        app.ui.show_message("OK", app.t("fb.make_wrote",
+                                        entity=entity, path=into))
+
+    # write tests
+    if test_code:
+        target = test_into or f"test_{entity}.py"
+        _write_feature(app, target, test_code)
+        app.ui.show_message("OK", app.t("fb.make_wrote_test",
+                                        path=target))
+
+    app.journal.write("SCAFFOLD", f"make {entity} --cols {cols_spec}")
+    return CommandResult()
+
+
+def _write_feature(app: "NixApp", filepath: str, content: str) -> None:
+    path = Path(filepath)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        stamp = utc_now_iso().replace(":", "").replace("-", "")[:15]
+        digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
+        bak = app.state.nix / "brain" / "backups" / f"{stamp}_{digest}_{path.name}"
+        bak.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, bak)
+    path.write_text(content, encoding="utf-8")
+
+
+@register("testgen", "generate test stubs from brain index",
+          "testgen <file|all> [--into path] [--apply]")
+def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
+    from .scaffold import render_testgen
+    from .modules.loader import all_modules
+
+    flags, rest = parse_flags(args)
+    target = rest[0] if rest else ""
+    into = flags.get("into", "")
+    apply = bool(flags.get("apply"))
+    lang = flags.get("lang", "")
+
+    if not target:
+        app.ui.show_message("ERROR", app.t("fb.testgen_usage"))
+        return CommandResult()
+
+    index, _ = app.brain.load()
+    symbols = index.get("symbols", [])
+
+    if not symbols:
+        app.ui.show_message("ERROR", app.t("fb.testgen_no_index"))
+        return CommandResult()
+
+    if target.lower() == "all":
+        filtered = symbols
+    else:
+        filtered = [s for s in symbols if s.get("file", "").endswith(target)]
+
+    if not filtered:
+        app.ui.show_message("ERROR",
+                            app.t("fb.testgen_no_symbols", target=target))
+        return CommandResult()
+
+    # resolve module
+    mod = None
+    if lang:
+        for m in all_modules():
+            if m.id == lang:
+                mod = m
+                break
+    if mod is None:
+        for m in all_modules():
+            mod = m
+            break
+
+    if mod is None:
+        app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
+        return CommandResult()
+
+    if "testgen" not in mod.gen:
+        app.ui.show_message("ERROR", app.t("fb.testgen_no_template"))
+        return CommandResult()
+
+    module_name = Path(target).stem if target.lower() != "all" else "project"
+    test_code = render_testgen(mod, filtered, module_name)
+
+    app.ui.show_message("TESTGEN", app.t("fb.testgen_preview", target=target))
+    app.ui.show_code(app.t("tbl.scaffold"), [test_code])
+
+    if not apply:
+        app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+        return CommandResult()
+
+    out_path = into or f"test_{module_name}.py"
+    _write_feature(app, out_path, test_code)
+    app.ui.show_message("OK", app.t("fb.testgen_wrote", path=out_path))
+    app.journal.write("TESTGEN", f"testgen {target}")
+    return CommandResult()
+
+
+BUILTIN_RECIPES: dict[str, str] = {
+    "feature": "make {0} --cols {1} --apply; testgen {0}.py --apply; git commit --apply",
+    "scaffold": "make {0} --cols {1} --apply",
+    "test": "testgen {0} --apply",
+}
+
+
+@register("recipe", "run named command chains",
+          "recipe [list|<name>] [--apply] [args...]")
+def cmd_recipe(app: "NixApp", args: list[str]) -> CommandResult:
+    flags, rest = parse_flags(args)
+    apply = bool(flags.get("apply"))
+
+    # load user recipes
+    user_recipes: dict[str, str] = {}
+    recipes_file = app.state.nix / "recipes.json"
+    if recipes_file.exists():
+        try:
+            user_recipes = json.loads(recipes_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            user_recipes = {}
+
+    all_recipes = {**BUILTIN_RECIPES, **user_recipes}
+
+    # list
+    if not rest or rest[0].lower() == "list":
+        if not all_recipes:
+            app.ui.show_message("SYSTEM", app.t("fb.recipe_empty"))
+            return CommandResult()
+        rows = [(k, v[:80], CYAN) for k, v in all_recipes.items()]
+        app.ui.show_block(app.t("tbl.recipe"), rows)
+        return CommandResult()
+
+    name = rest[0]
+    template = all_recipes.get(name)
+    if template is None:
+        app.ui.show_message("ERROR", app.t("fb.recipe_unknown", name=name))
+        return CommandResult()
+
+    # substitute positional args
+    extra = rest[1:]
+    try:
+        cmd_str = template.format(*extra)
+    except IndexError:
+        cmd_str = template
+
+    app.ui.show_message("RECIPE", app.t("fb.recipe_run", name=name))
+
+    # split by semicolons and execute each step
+    steps = [s.strip() for s in cmd_str.split(";") if s.strip()]
+    for i, step in enumerate(steps, 1):
+        app.ui.show_message("STEP", app.t("fb.recipe_step", i=i, cmd=step))
+        parts = step.split()
+        cmd_name = parts[0]
+        cmd_args = parts[1:]
+        if apply:
+            cmd_args.append("--apply")
+        cmd = get_command(cmd_name)
+        if cmd is None:
+            app.ui.show_message("ERROR",
+                                app.t("fb.unknown", name=cmd_name))
+            return CommandResult()
+        result = cmd.handler(app, cmd_args)
+        if not result.continue_session:
+            return result
+
+    app.journal.write("RECIPE", f"recipe {name}")
     return CommandResult()

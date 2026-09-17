@@ -1,0 +1,41 @@
+import unittest
+
+from {{module}} import (
+    {{Ent}}, create_{{snake}}, get_{{snake}},
+    list_{{snake}}, update_{{snake}}, delete_{{snake}},
+    _{{upper}}_STORE,
+)
+
+
+class Test{{Ent}}(unittest.TestCase):
+    def setUp(self):
+        _{{upper}}_STORE.clear()
+
+    def test_create_and_get(self):
+        item = create_{{snake}}({{test_args}})
+        self.assertIsNotNone(item)
+        self.assertEqual(item.{{pk_name}}, {{test_pk_val}})
+
+    def test_get_missing(self):
+        self.assertIsNone(get_{{snake}}({{test_pk_miss}}))
+
+    def test_list(self):
+        create_{{snake}}({{test_args}})
+        self.assertEqual(len(list_{{snake}}()), 1)
+
+    def test_update(self):
+        create_{{snake}}({{test_args}})
+        updated = update_{{snake}}({{test_pk_val}}, **{{test_update_kw}})
+        self.assertIsNotNone(updated)
+
+    def test_delete(self):
+        create_{{snake}}({{test_args}})
+        self.assertTrue(delete_{{snake}}({{test_pk_val}}))
+        self.assertIsNone(get_{{snake}}({{test_pk_val}}))
+
+    def test_delete_missing(self):
+        self.assertFalse(delete_{{snake}}({{test_pk_miss}}))
+
+
+if __name__ == "__main__":
+    unittest.main()

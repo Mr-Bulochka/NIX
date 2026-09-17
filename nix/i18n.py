@@ -320,6 +320,41 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "mood.relieved": "relieved",
         "mood.tired": "tired",
         "mood.anxious": "anxious",
+
+        # make
+        "cmd.make.desc": "scaffold a feature: model + CRUD + tests",
+        "cmd.make.usage": "make <entity> [--cols name:str:pk,age:int] [--into file] [--test-into file] [--apply] [--lang python]",
+        "fb.make_no_entity": "Usage: make <entity> [--cols name:str:pk,age:int]",
+        "fb.make_no_lang": "Cannot determine language. Use --lang or --into with a known extension.",
+        "fb.make_no_gen": "Module {mod} has no scaffold templates (scaffold_model.tmpl, scaffold_crud.tmpl).",
+        "fb.make_preview_model": "Model + CRUD (preview)",
+        "fb.make_preview_test": "Test (preview)",
+        "fb.make_wrote": "Wrote {entity} → {path}",
+        "fb.make_wrote_test": "Wrote tests → {path}",
+        "tbl.scaffold": "Scaffold",
+
+        # testgen
+        "cmd.testgen.desc": "generate test stubs from brain index",
+        "cmd.testgen.usage": "testgen <file|all> [--into path] [--apply] [--lang python]",
+        "fb.testgen_no_index": "Brain index is empty. Run scan first.",
+        "fb.testgen_no_symbols": "No symbols found for {target}.",
+        "fb.testgen_no_template": "Module has no testgen.tmpl template.",
+        "fb.testgen_preview": "Test stubs for {target} (preview)",
+        "fb.testgen_wrote": "Wrote test stubs → {path}",
+        "fb.testgen_usage": "Usage: testgen <file|all> [--into path] [--apply]",
+
+        # recipe
+        "cmd.recipe.desc": "run named command chains",
+        "cmd.recipe.usage": "recipe [list|<name>] [--apply] [args...]",
+        "fb.recipe_no_file": "No recipes.json found. Use 'recipe add <name> <template>' to create one.",
+        "fb.recipe_list": "Available recipes",
+        "fb.recipe_unknown": "Unknown recipe: {name}",
+        "fb.recipe_run": "Running recipe: {name}",
+        "fb.recipe_step": "Step {i}: {cmd}",
+        "fb.recipe_empty": "No recipes defined yet. Create recipes.json in .nix/ or use builtins.",
+        "tbl.recipe": "Recipes",
+        "tbl.recipe_name": "Name",
+        "tbl.recipe_template": "Template",
     },
     "ru": {
         # first launch
@@ -635,6 +670,41 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "mood.relieved": "облегчён",
         "mood.tired": "устал",
         "mood.anxious": "взволнован",
+
+        # make
+        "cmd.make.desc": "генерация фичи: модель + CRUD + тесты",
+        "cmd.make.usage": "make <сущность> [--cols имя:тип:pk,возраст:int] [--into файл] [--test-into файл] [--apply] [--lang python]",
+        "fb.make_no_entity": "Использование: make <сущность> [--cols имя:тип:pk,возраст:int]",
+        "fb.make_no_lang": "Не удалось определить язык. Укажите --lang или --into с известным расширением.",
+        "fb.make_no_gen": "Модуль {mod} не содержит шаблонов scaffold (scaffold_model.tmpl, scaffold_crud.tmpl).",
+        "fb.make_preview_model": "Модель + CRUD (предпросмотр)",
+        "fb.make_preview_test": "Тест (предпросмотр)",
+        "fb.make_wrote": "Записано {entity} → {path}",
+        "fb.make_wrote_test": "Записаны тесты → {path}",
+        "tbl.scaffold": "Скелет",
+
+        # testgen
+        "cmd.testgen.desc": "генерация тестовых заготовок по индексу",
+        "cmd.testgen.usage": "testgen <файл|all> [--into путь] [--apply] [--lang python]",
+        "fb.testgen_no_index": "Индекс brain пуст. Сначала выполните scan.",
+        "fb.testgen_no_symbols": "Символы не найдены для {target}.",
+        "fb.testgen_no_template": "У модуля нет шаблона testgen.tmpl.",
+        "fb.testgen_preview": "Тестовые заготовки для {target} (предпросмотр)",
+        "fb.testgen_wrote": "Записаны тестовые заготовки → {path}",
+        "fb.testgen_usage": "Использование: testgen <файл|all> [--into путь] [--apply]",
+
+        # recipe
+        "cmd.recipe.desc": "запуск именованных цепочек команд",
+        "cmd.recipe.usage": "recipe [list|<имя>] [--apply] [аргументы...]",
+        "fb.recipe_no_file": "recipes.json не найден. Создайте через 'recipe add <имя> <шаблон>'.",
+        "fb.recipe_list": "Доступные рецепты",
+        "fb.recipe_unknown": "Неизвестный рецепт: {name}",
+        "fb.recipe_run": "Запуск рецепта: {name}",
+        "fb.recipe_step": "Шаг {i}: {cmd}",
+        "fb.recipe_empty": "Рецепты ещё не определены. Создайте recipes.json в .nix/ или используйте встроенные.",
+        "tbl.recipe": "Рецепты",
+        "tbl.recipe_name": "Имя",
+        "tbl.recipe_template": "Шаблон",
     },
 }
 
