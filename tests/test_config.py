@@ -54,6 +54,16 @@ class TestConfigStore(unittest.TestCase):
             config = ConfigStore(nix_dir).load()
             self.assertEqual(config.attempts, 0)
 
+    def test_corrupt_typed_values_return_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            nix_dir = Path(tmp) / ".nix"
+            nix_dir.mkdir()
+            (nix_dir / "config.json").write_text(
+                json.dumps({"attempts": "abc", "mode": "nope"}), "utf-8")
+            config = ConfigStore(nix_dir).load()
+            self.assertEqual(config.attempts, 0)
+            self.assertEqual(config.mode, "local")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -799,7 +799,9 @@ def cmd_time(app: "NixApp", args: list[str]) -> CommandResult:
 # ---- code: language modules & construction --------------------------
 
 
-def _resolve_project_file(app: "NixApp", rel: str) -> Path | None:
+def _resolve_target_path(app: "NixApp", rel: str) -> Path | None:
+    """Resolve a project-relative path for writing, allowing the file to
+    be created. Returns None when the path would escape the project."""
     path = Path(rel)
     if not path.is_absolute():
         path = app.root / path
@@ -807,7 +809,12 @@ def _resolve_project_file(app: "NixApp", rel: str) -> Path | None:
     root = app.root.resolve()
     if path == root or root not in path.parents:
         return None
-    return path if path.exists() else None
+    return path
+
+
+def _resolve_project_file(app: "NixApp", rel: str) -> Path | None:
+    path = _resolve_target_path(app, rel)
+    return path if path is not None and path.exists() else None
 
 
 def _to_snake(name: str) -> str:
@@ -1049,15 +1056,23 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
                          snippet_lines)
         return CommandResult()
     path = _resolve_project_file(app, into_file)
+    new_file = False
     if path is None:
-        app.ui.show_message("ERROR", app.t("fb.file_missing", path=into_file))
-        return CommandResult()
-    try:
-        orig_text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        app.ui.show_message("ERROR", app.t("fb.failed", name="read", exc=exc))
-        return CommandResult()
-    orig_lines = orig_text.splitlines(keepends=True)
+        path = _resolve_target_path(app, into_file)
+        if path is None:
+            app.ui.show_message("ERROR", app.t("fb.file_missing", path=into_file))
+            return CommandResult()
+        new_file = True
+    if new_file:
+        orig_text = ""
+        orig_lines: list[str] = []
+    else:
+        try:
+            orig_text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            app.ui.show_message("ERROR", app.t("fb.failed", name="read", exc=exc))
+            return CommandResult()
+        orig_lines = orig_text.splitlines(keepends=True)
     at_raw = str(flags.get("at", "")) or None
     after = bool(flags.get("after"))
     if at_raw is not None and at_raw.lower() != "end":
@@ -1101,10 +1116,14 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
     try:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
-        backup_dir = app.state.nix / "brain" / "backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup = backup_dir / f"{stamp}-gen-{digest}-{path.name}"
-        backup.write_text(orig_text, encoding="utf-8")
+        backup_name = "-"
+        if not new_file:
+            backup_dir = app.state.nix / "brain" / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup = backup_dir / f"{stamp}-gen-{digest}-{path.name}"
+            backup.write_text(orig_text, encoding="utf-8")
+            backup_name = backup.name
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("".join(new_lines), encoding="utf-8")
     except OSError as exc:
         app.ui.show_message("ERROR", app.t("fb.failed", name="write", exc=exc))
@@ -1114,7 +1133,7 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
         app.pet_store.update_mood(app.pet, "success")
         app.pet_store.save(app.pet)
     app.ui.show_message("SYSTEM", app.t(
-        "fb.gen_written", name=name, file=path.name, backup=backup.name))
+        "fb.gen_written", name=name, file=path.name, backup=backup_name))
     return CommandResult()
 
 
@@ -1439,19 +1458,27 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
     apply = bool(flags.get("apply"))
     lang = flags.get("lang", "")
 
-    # resolve module
+    # resolve module; an explicit --lang/--into hint with no matching
+    # module is an error, never a silent fallback to another language
     mod = None
+    hint = ""
     if lang:
+        hint = str(lang)
         for m in all_modules():
             if m.id == lang:
                 mod = m
                 break
     elif into:
         ext = Path(into).suffix
-        for m in all_modules():
-            if ext in m.extensions:
-                mod = m
-                break
+        if ext:
+            hint = ext
+            for m in all_modules():
+                if ext in m.extensions:
+                    mod = m
+                    break
+    if mod is None and hint:
+        app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
+        return CommandResult()
     if mod is None:
         for m in all_modules():
             mod = m
@@ -1484,7 +1511,7 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_code(app.t("tbl.scaffold"), [test_code])
 
     if not apply:
-        app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+        app.ui.show_message("SYSTEM", app.t("fb.wrap_dry"))
         return CommandResult()
 
     # write model + crud
@@ -1501,6 +1528,9 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
                                         path=target))
 
     app.journal.write("SCAFFOLD", f"make {entity} --cols {cols_spec}")
+    if app.pet:
+        app.pet_store.update_mood(app.pet, "success")
+        app.pet_store.save(app.pet)
     return CommandResult()
 
 
@@ -1549,13 +1579,27 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
                             app.t("fb.testgen_no_symbols", target=target))
         return CommandResult()
 
-    # resolve module
+    # resolve module; an explicit --lang/--into hint with no matching
+    # module is an error, never a silent fallback to another language
     mod = None
+    hint = ""
     if lang:
+        hint = str(lang)
         for m in all_modules():
             if m.id == lang:
                 mod = m
                 break
+    elif into:
+        ext = Path(into).suffix
+        if ext:
+            hint = ext
+            for m in all_modules():
+                if ext in m.extensions:
+                    mod = m
+                    break
+    if mod is None and hint:
+        app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
+        return CommandResult()
     if mod is None:
         for m in all_modules():
             mod = m
@@ -1576,20 +1620,23 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_code(app.t("tbl.scaffold"), [test_code])
 
     if not apply:
-        app.ui.show_message("SYSTEM", app.t("fb.git_dry"))
+        app.ui.show_message("SYSTEM", app.t("fb.wrap_dry"))
         return CommandResult()
 
     out_path = into or f"test_{module_name}.py"
     _write_feature(app, out_path, test_code)
     app.ui.show_message("OK", app.t("fb.testgen_wrote", path=out_path))
     app.journal.write("TESTGEN", f"testgen {target}")
+    if app.pet:
+        app.pet_store.update_mood(app.pet, "success")
+        app.pet_store.save(app.pet)
     return CommandResult()
 
 
 BUILTIN_RECIPES: dict[str, str] = {
-    "feature": "make {0} --cols {1} --apply; testgen {0}.py --apply; git commit --apply",
-    "scaffold": "make {0} --cols {1} --apply",
-    "test": "testgen {0} --apply",
+    "feature": "make {0} --cols {1} --into {0}.py; testgen {0}.py; git commit",
+    "scaffold": "make {0} --cols {1} --into {0}.py",
+    "test": "testgen {0}",
 }
 
 
@@ -1630,6 +1677,10 @@ def cmd_recipe(app: "NixApp", args: list[str]) -> CommandResult:
     try:
         cmd_str = template.format(*extra)
     except IndexError:
+        app.ui.show_message("ERROR", app.t(
+            "fb.recipe_needs_args", name=name, tmpl=template[:60]))
+        return CommandResult()
+    except (KeyError, ValueError):
         cmd_str = template
 
     app.ui.show_message("RECIPE", app.t("fb.recipe_run", name=name))

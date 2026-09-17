@@ -70,6 +70,11 @@ KIND_COLORS = {
     "TEST": YELLOW,
     "LEARN": GREEN,
     "CHECKPOINT": BLUE,
+    "SCAFFOLD": CYAN,
+    "TESTGEN": PURPLE,
+    "RECIPE": BLUE,
+    "STEP": DIM,
+    "OK": GREEN,
 }
 
 APP_CSS = f"""
@@ -1071,7 +1076,6 @@ class NixUI(App):
         look = idle_look(f"{self.nix.root}:{pet.get('name', 'pet')}")
         art = render_avatar(pet, self.nix.root, scale=2,
                             blink=self._blink == 1, look=look)
-        t2 = Text()
         rows = [
             (t("pet.name"), pet.get("name", "???"), FG),
             (t("pet.skin"), self._skin_name(pet), PURPLE),

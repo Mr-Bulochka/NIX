@@ -64,6 +64,12 @@ class HeadlessUI:
     def _refresh_pet(self) -> None:
         pass
 
+    def clear_log(self) -> None:
+        self.events.clear()
+
+    def show_settings(self, config) -> None:
+        self.show_message("SYSTEM", config.t("fb.headless_no_settings"))
+
 
 class DaemonBackend(NixApp):
     """Headless NIX: same commands, no TUI.  Pets get a default

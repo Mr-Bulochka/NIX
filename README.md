@@ -84,7 +84,10 @@ generation work in a given language. Bundled modules live in
 | `defs [--max N] [glob]` | List project functions/classes (from the project index) |
 | `blocks <file> <line>` | Show the block enclosing a line |
 | `wrap <file> <line> in <op> [--slot v] [--apply]` | Wrap a block in a language op (dry-run unless `--apply`) |
-| `gen <type> <name> [--into f] [--at N] [--apply] [--params .. --ret .. --doc .. --body ..]` | Generate code from a template (preview unless `--into`; `--apply` writes) |
+| `gen <type> <name> [--into f] [--at N] [--apply] [--params .. --ret .. --doc .. --body ..]` | Generate code from a template (preview unless `--into`; `--apply` writes into it or creates a new file) |
+| `make <entity> [--cols name:str:pk,...] [--into f] [--test-into f] [--apply]` | Scaffold a model + CRUD + tests from column specs (dry-run unless `--apply`; language inferred from `--into` extension or `--lang`, an unsupported hint is an error) |
+| `testgen <file\|all> [--into f] [--apply]` | Generate test stubs from the project index (dry-run unless `--apply`) |
+| `recipe [list\|<name>] [--apply] [args...]` | Run named command chains; built-ins: `feature`, `scaffold`, `test`; user recipes live in `.nix/recipes.json` (`{0}`, `{1}`, ... are positional args; re-run with `--apply` to write) |
 | `rename <old> <new> [--file f] [--apply]` | Project-wide symbolic rename (dry-run unless `--apply`) |
 | `ident` | Show the project's identity patterns (naming, docstrings, ...) |
 
@@ -151,6 +154,7 @@ its own signature palette, so every pill is a visible transformation.
 ```
 .nix/
 ├── config.json
+├── recipes.json
 ├── state/
 ├── journal/
 ├── logs/

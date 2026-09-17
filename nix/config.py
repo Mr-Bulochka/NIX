@@ -54,7 +54,7 @@ class ConfigStore:
             known = {f.name for f in fields(Config)}
             filtered = {k: v for k, v in raw.items() if k in known}
             return Config(**filtered)
-        except (OSError, json.JSONDecodeError, TypeError, KeyError):
+        except (OSError, json.JSONDecodeError, TypeError, KeyError, ValueError):
             return Config()
 
     def save(self, config: Config) -> None:

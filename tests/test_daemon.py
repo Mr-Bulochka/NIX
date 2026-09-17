@@ -58,6 +58,25 @@ class TestDaemon(unittest.TestCase):
         result = run_single(self._backend(), "no_such_command_xyz")
         self.assertTrue(result["ok"])
 
+    def test_clear_command_headless(self):
+        (self.root / "app.py").write_text("def main():\n    pass\n",
+                                          encoding="utf-8")
+        b = self._backend()
+        run_single(b, "defs")
+        titles = [e.get("title") for e in b.ui.events]
+        self.assertIn("Symbols", titles)
+        run_single(b, "clear")
+        titles = [e.get("title") for e in b.ui.events]
+        self.assertNotIn("Symbols", titles)
+
+    def test_settings_command_headless(self):
+        b = self._backend()
+        result = run_single(b, "settings")
+        self.assertTrue(result["ok"])
+        texts = [e.get("text", "") for e in result["events"]]
+        self.assertTrue(any("unavailable in headless" in text
+                            for text in texts))
+
 
 if __name__ == "__main__":
     unittest.main()

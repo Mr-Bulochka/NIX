@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -37,6 +38,13 @@ class _PetStore:
     def __init__(self):
         self.pet = MagicMock()
         self.pet.name = "testpet"
+        self.moods: list[str] = []
+
+    def update_mood(self, pet, mood):
+        self.moods.append(mood)
+
+    def save(self, pet):
+        pass
 
 
 class _State:
@@ -67,6 +75,7 @@ class _Rec:
         self.ui = _UI()
         self.journal = _Journal()
         self.pet_store = _PetStore()
+        self.pet = self.pet_store.pet
         self.state = _State(tmp)
         self.config = MagicMock()
         self.config.mode = "suggest"
@@ -153,8 +162,10 @@ class TestMake(unittest.TestCase):
         tmp.mkdir(parents=True, exist_ok=True)
         app = _Rec(tmp)
         into = str(tmp / "user.py")
+        test_into = str(tmp / "test_user.py")
         _fire(app, "make", ["user", "--cols", "name:str:pk,age:int",
-                            "--into", into, "--apply"])
+                            "--into", into, "--test-into", test_into,
+                            "--apply"])
         self.assertTrue(Path(into).exists())
         content = Path(into).read_text("utf-8")
         self.assertIn("class User:", content)
@@ -175,6 +186,39 @@ class TestMake(unittest.TestCase):
         content = Path(test_into).read_text("utf-8")
         self.assertIn("class TestUser", content)
         self.assertIn("test_create_and_get", content)
+
+    def test_unknown_lang_errors(self):
+        tmp = Path("/tmp/_test_make_bad_lang")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        into = str(tmp / "user.rs")
+        _fire(app, "make", ["user", "--cols", "name:str",
+                            "--lang", "rust", "--into", into, "--apply"])
+        kinds = [k for k, _ in app.ui.shown]
+        self.assertIn("ERROR", kinds)
+        self.assertFalse(Path(into).exists())
+
+    def test_unknown_ext_errors(self):
+        tmp = Path("/tmp/_test_make_bad_ext")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        into = str(tmp / "user.rs")
+        _fire(app, "make", ["user", "--cols", "name:str",
+                            "--into", into, "--apply"])
+        kinds = [k for k, _ in app.ui.shown]
+        self.assertIn("ERROR", kinds)
+        self.assertFalse(Path(into).exists())
+
+    def test_apply_marks_mood(self):
+        tmp = Path("/tmp/_test_make_mood")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        into = str(tmp / "user.py")
+        test_into = str(tmp / "test_user.py")
+        _fire(app, "make", ["user", "--cols", "name:str:pk",
+                            "--into", into, "--test-into", test_into,
+                            "--apply"])
+        self.assertIn("success", app.pet_store.moods)
 
 
 class TestTestgen(unittest.TestCase):
@@ -225,6 +269,14 @@ class TestTestgen(unittest.TestCase):
         kinds = [k for k, _ in app.ui.shown]
         self.assertIn("ERROR", kinds)
 
+    def test_unknown_lang_errors(self):
+        tmp = Path("/tmp/_test_testgen_bad_lang")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        _fire(app, "testgen", ["core.py", "--lang", "rust"])
+        kinds = [k for k, _ in app.ui.shown]
+        self.assertIn("ERROR", kinds)
+
 
 class TestRecipe(unittest.TestCase):
     def test_list_builtin(self):
@@ -241,6 +293,68 @@ class TestRecipe(unittest.TestCase):
         _fire(app, "recipe", ["nonexistent"])
         kinds = [k for k, _ in app.ui.shown]
         self.assertIn("ERROR", kinds)
+
+    def test_dry_does_not_write(self):
+        tmp = Path("/tmp/_test_recipe_dry")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        prev = os.getcwd()
+        os.chdir(tmp)
+        try:
+            _fire(app, "recipe", ["scaffold", "widget", "name:str"])
+        finally:
+            os.chdir(prev)
+        self.assertFalse(Path(str(tmp / "widget.py")).exists())
+
+    def test_apply_writes(self):
+        tmp = Path("/tmp/_test_recipe_apply")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        prev = os.getcwd()
+        os.chdir(tmp)
+        try:
+            _fire(app, "recipe", ["scaffold", "widget", "name:str",
+                                  "--apply"])
+        finally:
+            os.chdir(prev)
+        self.assertTrue(Path(str(tmp / "widget.py")).exists())
+        content = (tmp / "widget.py").read_text("utf-8")
+        self.assertIn("class Widget:", content)
+
+    def test_missing_args_error(self):
+        tmp = Path("/tmp/_test_recipe_args")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        app.state.write_json("recipes.json", {"oops": "echo {0} {1} {2}"})
+        _fire(app, "recipe", ["oops", "one"])
+        kinds = [k for k, _ in app.ui.shown]
+        self.assertIn("ERROR", kinds)
+
+    def test_braces_no_crash(self):
+        tmp = Path("/tmp/_test_recipe_braces")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        app.state.write_json("recipes.json", {"bad": "echo {hello} {0 {"})
+        _fire(app, "recipe", ["bad"])
+        kinds = [k for k, _ in app.ui.shown]
+        self.assertIn("ECHO", kinds)
+
+
+class TestGenNewFile(unittest.TestCase):
+    def test_into_new_file(self):
+        tmp = Path("/tmp/_test_gen_newfile")
+        tmp.mkdir(parents=True, exist_ok=True)
+        app = _Rec(tmp)
+        app.brain.ensure.return_value = (
+            {"files": 0, "symbols": []}, {},
+        )
+        into = str(tmp / "sub" / "newmod.py")
+        _fire(app, "gen", ["function", "hello", "--into", into,
+                           "--doc", "says hi", "--apply"])
+        self.assertTrue(Path(into).exists())
+        content = Path(into).read_text("utf-8")
+        self.assertIn("def hello(", content)
+        self.assertIn("says hi", content)
 
 
 if __name__ == "__main__":
