@@ -126,15 +126,24 @@ def _encode(payload: dict) -> str:
     return json.dumps(_jsonable(payload), ensure_ascii=False)
 
 
-def run_stdin(backend: DaemonBackend) -> None:
-    """Line-oriented protocol over stdin/stdout (JSON Lines)."""
+def _stdout_stream():
+    """A UTF-8 text stream for protocol output on any console.
+
+    The daemon payloads may contain non-ASCII (e.g. a ``×`` in diff
+    stats); wrapping the buffer prevents UnicodeEncodeError on cp1251
+    consoles while keeping the reader decoding deterministic.
+    """
     import io
     try:
-        stream = io.TextIOWrapper(sys.stdout.buffer,
-                                  encoding=sys.stdout.encoding or "utf-8",
-                                  errors="replace")
+        return io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
+                                errors="replace")
     except (AttributeError, ValueError):
-        stream = sys.stdout
+        return sys.stdout
+
+
+def run_stdin(backend: DaemonBackend) -> None:
+    """Line-oriented protocol over stdin/stdout (JSON Lines)."""
+    stream = _stdout_stream()
     for raw in sys.stdin:
         stream.write(_encode(run_single(backend, raw)) + "\n")
         stream.flush()
@@ -189,7 +198,9 @@ def main(argv: list[str]) -> int:
         if idx + 1 < len(argv):
             socket_arg = argv[idx + 1]
     if once is not None:
-        sys.stdout.write(_encode(run_single(backend, once)) + "\n")
+        stream = _stdout_stream()
+        stream.write(_encode(run_single(backend, once)) + "\n")
+        stream.flush()
         return 0
     if socket_arg is not None:
         host, port = _parse_socket_arg(socket_arg)

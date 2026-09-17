@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from . import __version__
@@ -12,6 +11,60 @@ from .pet import Pet
 from .state import State, utc_now_ts
 
 PILL_COOLDOWN = 30 * 60
+
+
+def _tokenize_nix(text: str) -> list[tuple[str, str]]:
+    """Split a command line into args and chain separators.
+
+    Whitespace separates arguments; a matching pair of single or double
+    quotes groups a value (the quotes themselves are dropped); outside
+    quotes, ``;`` or ``&&`` splits the line into separate commands.
+    Returns ``("arg", value)`` and ``("sep", ";")`` / ``("sep", "&&")``
+    items in order.
+    """
+    items: list[tuple[str, str]] = []
+    buf: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in ("'", '"'):
+            if buf:
+                items.append(("arg", "".join(buf)))
+                buf = []
+            quote = c
+            i += 1
+            value: list[str] = []
+            while i < n and text[i] != quote:
+                value.append(text[i])
+                i += 1
+            i += 1
+            items.append(("arg", "".join(value)))
+            continue
+        if c == ";":
+            if buf:
+                items.append(("arg", "".join(buf)))
+                buf = []
+            items.append(("sep", ";"))
+            i += 1
+            continue
+        if c == "&" and i + 1 < n and text[i + 1] == "&":
+            if buf:
+                items.append(("arg", "".join(buf)))
+                buf = []
+            items.append(("sep", "&&"))
+            i += 2
+            continue
+        if c.isspace():
+            if buf:
+                items.append(("arg", "".join(buf)))
+                buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    if buf:
+        items.append(("arg", "".join(buf)))
+    return items
 
 
 class NixApp:
@@ -77,23 +130,31 @@ class NixApp:
         self.session_logger.write("COMMAND", raw)
 
         text = raw[1:] if raw.startswith("/") else raw
-        parts_seq = [p for p in re.split(r"\s*(?:;|&&)\s*", text)]
+        chunks: list[list[str]] = []
+        cur: list[str] = []
+        for kind, value in _tokenize_nix(text):
+            if kind == "arg":
+                cur.append(value)
+            elif cur:
+                chunks.append(cur)
+                cur = []
+        if cur:
+            chunks.append(cur)
         continue_session = True
-        for expr in parts_seq:
-            if not expr.strip():
+        for chunk in chunks:
+            if not chunk:
                 continue
-            if not self._handle_command_single(expr.strip()):
+            if not self._handle_command_args(chunk):
                 continue_session = False
                 break
         return continue_session
 
-    def _handle_command_single(self, raw: str) -> bool:
-        parts = raw.split()
-        if not parts:
+    def _handle_command_args(self, args: list[str]) -> bool:
+        if not args:
             return True
 
-        name = parts[0].lower()
-        args = parts[1:]
+        name = args[0].lower()
+        rest = args[1:]
 
         if name in ("quit", "exit"):
             self.session_logger.write("SYSTEM", "session ended by user")
@@ -108,7 +169,7 @@ class NixApp:
             return True
 
         try:
-            result = cmd.handler(self, args)
+            result = cmd.handler(self, rest)
         except Exception as exc:
             self.ui.show_message("ERROR", self.t("fb.failed", name=name, exc=exc))
             self.session_logger.write("ERROR", f"/{name} failed: {exc}")

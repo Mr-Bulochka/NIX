@@ -1562,7 +1562,7 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.testgen_usage"))
         return CommandResult()
 
-    index, _ = app.brain.load()
+    index = app.brain.build()
     symbols = index.get("symbols", [])
 
     if not symbols:
@@ -1572,7 +1572,9 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
     if target.lower() == "all":
         filtered = symbols
     else:
-        filtered = [s for s in symbols if s.get("file", "").endswith(target)]
+        stem = Path(target).stem
+        filtered = [s for s in symbols
+                    if Path(s.get("file", "")).stem == stem]
 
     if not filtered:
         app.ui.show_message("ERROR",

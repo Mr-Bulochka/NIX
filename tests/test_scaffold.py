@@ -94,6 +94,7 @@ class _Rec:
             {"naming_top": "snake_case", "functions": 1,
              "function_doc_ratio": 0.5, "exception_var": "e"},
         )
+        self.brain.build.return_value = self.brain.load.return_value[0]
 
     def t(self, key, **kw):
         from nix.i18n import t
@@ -261,10 +262,7 @@ class TestTestgen(unittest.TestCase):
         tmp = Path("/tmp/_test_testgen_empty")
         tmp.mkdir(parents=True, exist_ok=True)
         app = _Rec(tmp)
-        app.brain.load.return_value = (
-            {"files": 0, "symbols": []},
-            {},
-        )
+        app.brain.build.return_value = {"files": 0, "symbols": []}
         _fire(app, "testgen", ["core.py"])
         kinds = [k for k, _ in app.ui.shown]
         self.assertIn("ERROR", kinds)
