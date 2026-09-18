@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "find_method",
+      "source": "void foo() {\n    return;\n}\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 3}]
+    },
+    {
+      "name": "find_public_class",
+      "source": "public class Bar {\n}\n",
+      "blocks": [{"kind": "class", "name": "Bar", "start": 1, "end": 2}]
+    }
+  ]
+}

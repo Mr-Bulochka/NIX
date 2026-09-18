@@ -104,6 +104,48 @@ class TestCommands(unittest.TestCase):
             finally:
                 os.chdir(old)
 
+    def test_scan_auto_detects_priority_language(self):
+        from nix.app import NixApp
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                Path(tmp, "app.py").write_text(
+                    "print('hello')\n", encoding="utf-8")
+                Path(tmp, "util.py").write_text(
+                    "def f(): pass\n", encoding="utf-8")
+                Path(tmp, "script.js").write_text(
+                    "console.log(1)\n", encoding="utf-8")
+                app = NixApp()
+                app.ui = _StubUI()
+                app.pet = app.pet_store.create("Tester")
+                app.config.priority_lang = ""
+                from nix.commands import cmd_scan
+                cmd_scan(app, [])
+                self.assertEqual(app.config.priority_lang, "python")
+                self.assertEqual(app.config_store.load().priority_lang,
+                                 "python")
+            finally:
+                os.chdir(old)
+
+    def test_scan_keeps_manual_priority(self):
+        from nix.app import NixApp
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                Path(tmp, "app.py").write_text(
+                    "print('hello')\n", encoding="utf-8")
+                app = NixApp()
+                app.ui = _StubUI()
+                app.pet = app.pet_store.create("Tester")
+                app.config.priority_lang = "go"
+                from nix.commands import cmd_scan
+                cmd_scan(app, [])
+                self.assertEqual(app.config.priority_lang, "go")
+            finally:
+                os.chdir(old)
+
     def test_pill_cooldown(self):
         from nix.avatar import VARIANT_KINDS
         from nix.app import NixApp

@@ -1,0 +1,6 @@
+{
+  "id": "cpp",
+  "name": "C++",
+  "version": "1.0",
+  "extensions": [".cpp", ".cc", ".hpp", ".hxx"]
+}

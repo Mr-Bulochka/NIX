@@ -1,0 +1,17 @@
+{
+  "blocks": {
+    "function": {
+      "start": "^(\\s*)func\\s+(?:\\([^)]*\\)\\s+)?(?P<name>[A-Za-z_][\\w$]*)\\s*\\(",
+      "body": "braces"
+    },
+    "if": {
+      "start": "^(\\s*)if\\s+",
+      "body": "braces",
+      "alternate": ["else if", "else"]
+    },
+    "for": {
+      "start": "^(\\s*)for\\s+",
+      "body": "braces"
+    }
+  }
+}

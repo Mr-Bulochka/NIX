@@ -5,6 +5,7 @@ from pathlib import Path
 from . import __version__
 from .brain import Brain
 from .config import ConfigStore
+from .modules.loader import all_modules, set_enabled_modules
 from .journal import Journal
 from .logger import SessionLogger
 from .pet import Pet
@@ -77,6 +78,7 @@ class NixApp:
 
         self.config_store = ConfigStore(self.state.nix)
         self.config = self.config_store.load()
+        set_enabled_modules(self.config.enabled_modules)
 
         self.session_logger = SessionLogger(self.state.nix)
         self.journal = Journal(self.state.nix)
@@ -90,6 +92,12 @@ class NixApp:
         from .ui import NixUI
         self.ui = NixUI(self)
         self.ui.run()
+
+    def apply_module_settings(self) -> None:
+        """Re-apply the enabled-modules set from config and refresh the
+        brain's module map (settings may have changed at runtime)."""
+        set_enabled_modules(self.config.enabled_modules)
+        self.brain.modules = {m.id: m for m in all_modules()}
 
     def t(self, key: str, **kwargs) -> str:
         return self.config.t(key, **kwargs)

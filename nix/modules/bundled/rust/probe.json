@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "find_function",
+      "source": "fn foo() {\n}\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 2}]
+    },
+    {
+      "name": "find_pub_function",
+      "source": "pub fn bar() -> u32 {\n}\n",
+      "blocks": [{"kind": "function", "name": "bar", "start": 1, "end": 2}]
+    }
+  ]
+}

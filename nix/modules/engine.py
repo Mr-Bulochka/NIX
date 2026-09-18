@@ -11,6 +11,7 @@ class Block:
     end: int  # 1-based last line of the block body (header if empty)
     name: str
     indent: int  # leading whitespace width of the header
+    body: str = "indent"  # block body style: indent / braces / do-end
 
 
 def leading_ws(line: str) -> int:
@@ -92,7 +93,7 @@ def scan_blocks(lines: list[str], kind: str, block_def: dict) -> list[Block]:
         name = m.group("name") if "name" in m.groupdict() else ""
         end = block_end(lines, i, body, indent)
         results.append(Block(kind=kind, start=i + 1, end=end + 1,
-                             name=name, indent=indent))
+                             name=name, indent=indent, body=body))
     return results
 
 
@@ -131,6 +132,11 @@ def apply_wrap(lines: list[str], block: Block, op_def: dict,
     head = lines[: block.start]
     body_lines = lines[block.start:block.end]
     tail = lines[block.end:]
+
+    if block.body == "braces" and body_lines and body_lines[-1].strip() == "}":
+        # The closing brace is structural: the op's own "after" lines
+        # restore it, so a re-indented copy must not be re-emitted.
+        body_lines = body_lines[:-1]
 
     inner = int(op_def.get("inner_indent", 4))
     bi = block.indent

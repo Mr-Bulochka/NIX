@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -25,6 +26,8 @@ class Config:
     checkpoint_on_mutate: bool = True
     git_auto_commit: bool = False
     protected_paths: list[str] | None = None
+    enabled_modules: list[str] | None = None
+    priority_lang: str = ""
 
     def __post_init__(self) -> None:
         if self.mode not in VALID_MODES:
@@ -34,6 +37,20 @@ class Config:
         if self.protected_paths is None:
             self.protected_paths = ["pyproject.toml", "setup.cfg", "Cargo.toml",
                                      "package.json", ".env"]
+        if self.enabled_modules is not None:
+            if not isinstance(self.enabled_modules, list):
+                self.enabled_modules = None
+            else:
+                seen: list[str] = []
+                for item in self.enabled_modules:
+                    if (isinstance(item, str)
+                            and re.fullmatch(r"[A-Za-z0-9_\-]+", item)
+                            and item not in seen):
+                        seen.append(item)
+                self.enabled_modules = seen
+        if not isinstance(self.priority_lang, str) or not re.fullmatch(
+                r"[A-Za-z0-9_\-]+", self.priority_lang):
+            self.priority_lang = ""
         self.attempts = max(0, min(self.attempts, self.max_attempts))
         self.mutation_budget = max(0, self.mutation_budget)
 

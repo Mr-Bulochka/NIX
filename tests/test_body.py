@@ -85,6 +85,7 @@ class _Rec:
         self.state = _State(tmp)
         self.config = MagicMock()
         self.config.lang = "en"
+        self.config.priority_lang = ""
         self.root = tmp
         self.brain = MagicMock()
         self.brain.ensure.return_value = (

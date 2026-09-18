@@ -18,6 +18,7 @@ from .avatar import (genes_for as avatar_genes_for, render as render_avatar,
                        idle_look)
 from .avatar import VARIANT_KINDS
 from .i18n import LANGUAGES, t as _t
+from .modules import all_modules
 
 MODES = ("local", "safe", "git")
 
@@ -549,6 +550,9 @@ class SettingsModal(ModalScreen[None]):
     def _t(self, key: str, **kw) -> str:
         return self._ui._t(key, **kw)
 
+    def _mods(self) -> list:
+        return sorted(all_modules(), key=lambda m: m.id)
+
     def _row(self, label: str, field) -> Horizontal:
         return Horizontal(
             Label(label, classes="set-label"),
@@ -579,6 +583,19 @@ class SettingsModal(ModalScreen[None]):
                     ),
                 )
                 yield self._row(
+                    t("set.priority_lang"),
+                    Select(
+                        [(t("set.auto"), "")] + [
+                            (m.name, m.id) for m in self._mods()
+                        ],
+                        value=draft.priority_lang
+                        if any(m.id == draft.priority_lang
+                               for m in self._mods())
+                        else "",
+                        id="set-priority-lang",
+                    ),
+                )
+                yield self._row(
                     t("set.skin"),
                     Label("", id="set-skin-label", classes="set-field"),
                 )
@@ -598,6 +615,16 @@ class SettingsModal(ModalScreen[None]):
                     yield self._row(
                         t(self._toggle_label(wid)),
                         Switch(getattr(draft, key), id=wid),
+                    )
+                yield Label(t("set.modules"), classes="set-hint")
+                for m in self._mods():
+                    yield self._row(
+                        m.name,
+                        Switch(
+                            draft.enabled_modules is None
+                            or m.id in draft.enabled_modules,
+                            id=f"set-mod-{m.id}",
+                        ),
                     )
             with Horizontal(id="set-footer"):
                 yield Button("", id="set-close", classes="set-btn")
@@ -648,6 +675,8 @@ class SettingsModal(ModalScreen[None]):
             self._draft.language = event.value
         elif wid == "set-mode":
             self._draft.mode = event.value
+        elif wid == "set-priority-lang":
+            self._draft.priority_lang = event.value or ""
 
     def on_input_submitted(self, event) -> None:
         if not self._input_ready:
@@ -667,9 +696,20 @@ class SettingsModal(ModalScreen[None]):
     def on_switch_changed(self, event) -> None:
         if not self._input_ready:
             return
-        key = self.TOGGLE_KEYS.get(getattr(event.switch, "id", ""))
+        wid = getattr(event.switch, "id", "")
+        key = self.TOGGLE_KEYS.get(wid)
         if key:
             setattr(self._draft, key, event.value)
+        elif wid.startswith("set-mod-"):
+            self._draft.enabled_modules = self._enabled_from_switches()
+
+    def _enabled_from_switches(self) -> list[str] | None:
+        mods = self._mods()
+        enabled = [
+            m.id for m in mods
+            if self.query_one(f"#set-mod-{m.id}", Switch).value
+        ]
+        return None if len(enabled) == len(mods) else enabled
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         wid = getattr(event.button, "id", "")
@@ -697,10 +737,12 @@ class SettingsModal(ModalScreen[None]):
         self.dismiss(None)
 
     def _apply(self) -> None:
+        self._draft.enabled_modules = self._enabled_from_switches()
         for f in fields(self._cfg):
             setattr(self._cfg, f.name, getattr(self._draft, f.name))
         self._save(self._cfg)
         self._ui._apply_language()
+        self._ui.nix.apply_module_settings()
         self._ui._refresh_pet()
         self._ui._refresh_header()
 

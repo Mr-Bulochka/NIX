@@ -10,6 +10,9 @@ BUNDLED_DIR = Path(__file__).resolve().parent / "bundled"
 USER_HOME = Path(os.environ.get("NIX_HOME", "~")).expanduser()
 USER_MODULES_DIR = USER_HOME / ".nix" / "modules"
 
+# Restricts which modules are loaded.  None = all bundled/user modules enabled.
+_ENABLED: frozenset[str] | None = None
+
 
 @dataclass
 class CodeModule:
@@ -74,10 +77,23 @@ def _module_dir_for(user_dir: Path, modules_dir: Path) -> Path | None:
     return None
 
 
+def set_enabled_modules(ids: list[str] | None) -> None:
+    """Restrict which modules are loadable.  None = all enabled."""
+    global _ENABLED
+    _ENABLED = frozenset(ids) if ids is not None else None
+
+
+def is_module_enabled(module_id: str) -> bool:
+    """True when the module id is allowed by the enabled set."""
+    return _ENABLED is None or module_id in _ENABLED
+
+
 def load_module(module_id: str) -> CodeModule | None:
     """Load a code module.  A user module (NIX_HOME/~/.nix/modules)
     shadows the bundled one with the same id."""
     if not re.fullmatch(r"[A-Za-z0-9_\-]+", module_id):
+        return None
+    if not is_module_enabled(module_id):
         return None
     if USER_MODULES_DIR.is_dir():
         for child in sorted(USER_MODULES_DIR.iterdir()):
@@ -94,12 +110,14 @@ def load_module(module_id: str) -> CodeModule | None:
     return None
 
 
-def all_modules() -> list[CodeModule]:
+def all_modules(enabled_only: bool = True) -> list[CodeModule]:
     mods: dict[str, CodeModule] = {}
     for child in sorted(BUNDLED_DIR.iterdir()):
         if child.is_dir():
             mod = _read_dir(child, "bundled")
             if mod is not None:
+                if enabled_only and not is_module_enabled(mod.id):
+                    continue
                 mods[mod.id] = mod
     if USER_MODULES_DIR.is_dir():
         for child in sorted(USER_MODULES_DIR.iterdir()):
@@ -107,6 +125,8 @@ def all_modules() -> list[CodeModule]:
                 continue
             by_id = _read_dir(child, "user")
             if by_id is not None:
+                if enabled_only and not is_module_enabled(by_id.id):
+                    continue
                 mods[by_id.id] = by_id  # simplest form: a module in its own folder
                 continue
             resolved = _module_dir_for(child, USER_MODULES_DIR)
@@ -114,13 +134,39 @@ def all_modules() -> list[CodeModule]:
                 continue
             mod = _read_dir(resolved, "user")
             if mod is not None:
+                if enabled_only and not is_module_enabled(mod.id):
+                    continue
                 mods[mod.id] = mod  # user wins
     return sorted(mods.values(), key=lambda m: m.id)
 
 
-def module_for_file(filename: str) -> str | None:
-    ext = Path(filename).suffix.lower()
-    for mod in all_modules():
+def module_for_ext(ext: str) -> str | None:
+    """Return the module id owning an extension (case-insensitive,
+    "." optional)."""
+    ext = ext.lower()
+    if ext and not ext.startswith("."):
+        ext = "." + ext
+    for mod in all_modules(enabled_only=True):
         if ext in mod.extensions:
             return mod.id
     return None
+
+
+def module_for_file(filename: str) -> str | None:
+    return module_for_ext(Path(filename).suffix.lower())
+
+
+def predict_priority_language(extensions: dict[str, int]) -> str | None:
+    """Guess the project's primary language from an extension->count map.
+    Most files wins; ties break alphabetically.  Returns None when no
+    known extension is present."""
+    totals: dict[str, int] = {}
+    for ext, count in extensions.items():
+        if not ext or ext == "<no ext>":
+            continue
+        module_id = module_for_ext(ext)
+        if module_id is not None:
+            totals[module_id] = totals.get(module_id, 0) + count
+    if not totals:
+        return None
+    return max(sorted(totals), key=totals.get)

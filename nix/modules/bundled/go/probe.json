@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "find_function",
+      "source": "func foo() {\n}\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 2}]
+    },
+    {
+      "name": "find_method",
+      "source": "func (r *Receiver) Bar() {\n}\n",
+      "blocks": [{"kind": "function", "name": "Bar", "start": 1, "end": 2}]
+    }
+  ]
+}

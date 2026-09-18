@@ -274,8 +274,14 @@ def cmd_status(app: "NixApp", args: list[str]) -> CommandResult:
 @register("scan", "read-only project inventory", "scan [--tree] [--depth N] [--top N]")
 def cmd_scan(app: "NixApp", args: list[str]) -> CommandResult:
     from .scanner import scan_project
+    from .modules import predict_priority_language
     flags, rest = parse_flags(args)
     info = scan_project(app.root)
+    detected = predict_priority_language(info.extensions)
+    if detected and not app.config.priority_lang:
+        app.config.priority_lang = detected
+        app.config_store.save(app.config)
+        app.ui.show_message("SYSTEM", app.t("scan.priority", name=detected))
     if flags.get("tree"):
         depth = _num(flags.get("depth"), 2)
         app.ui.show_tree(app.t("tbl.tree"),
@@ -1010,7 +1016,7 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.gen_usage"))
         return CommandResult()
     gtype, name = rest[0], rest[1]
-    lang_id = str(flags.get("lang", "python"))
+    lang_id = str(flags.get("lang") or "") or (app.config.priority_lang or "python")
     mod = load_module(lang_id)
     candidates = sorted(mod.gen) if mod else []
     if mod is None or gtype not in candidates:
@@ -1480,9 +1486,15 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
         return CommandResult()
     if mod is None:
+        target = app.config.priority_lang or "python"
         for m in all_modules():
-            mod = m
-            break
+            if m.id == target:
+                mod = m
+                break
+        if mod is None:
+            for m in all_modules():
+                mod = m
+                break
 
     if mod is None:
         app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
@@ -1606,9 +1618,15 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.make_no_lang"))
         return CommandResult()
     if mod is None:
+        target = app.config.priority_lang or "python"
         for m in all_modules():
-            mod = m
-            break
+            if m.id == target:
+                mod = m
+                break
+        if mod is None:
+            for m in all_modules():
+                mod = m
+                break
 
     if mod is None:
         app.ui.show_message("ERROR", app.t("fb.make_no_lang"))

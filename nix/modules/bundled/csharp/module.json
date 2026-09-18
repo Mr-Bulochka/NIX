@@ -1,0 +1,6 @@
+{
+  "id": "csharp",
+  "name": "C#",
+  "version": "1.0",
+  "extensions": [".cs"]
+}

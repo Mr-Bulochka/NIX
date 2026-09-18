@@ -1,0 +1,6 @@
+{
+  "id": "javascript",
+  "name": "JavaScript",
+  "version": "1.0",
+  "extensions": [".js", ".jsx", ".mjs", ".cjs"]
+}

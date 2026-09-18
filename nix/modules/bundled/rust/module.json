@@ -1,0 +1,6 @@
+{
+  "id": "rust",
+  "name": "Rust",
+  "version": "1.0",
+  "extensions": [".rs"]
+}

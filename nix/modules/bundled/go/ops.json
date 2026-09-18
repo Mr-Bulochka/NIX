@@ -1,0 +1,13 @@
+{
+  "ops": {
+    "wrap-in-if": {
+      "before": ["if {{cond}} {"],
+      "inner_indent": 4,
+      "after": ["} else {", "    {{alternate}}", "}"],
+      "slots": {"cond": "true", "alternate": "// TODO"}
+    },
+    "comment": {
+      "prefix": "// "
+    }
+  }
+}

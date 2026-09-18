@@ -1,0 +1,19 @@
+{
+  "tests": [
+    {
+      "name": "find_function",
+      "source": "function foo() {\n    return 1;\n}\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 3}]
+    },
+    {
+      "name": "find_async_function",
+      "source": "async function load() {\n}\n",
+      "blocks": [{"kind": "function", "name": "load", "start": 1, "end": 2}]
+    },
+    {
+      "name": "find_class",
+      "source": "export class Bar {\n}\n",
+      "blocks": [{"kind": "class", "name": "Bar", "start": 1, "end": 2}]
+    }
+  ]
+}

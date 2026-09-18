@@ -1,0 +1,21 @@
+{
+  "blocks": {
+    "function": {
+      "start": "^(\\s*)(?:(?:static|inline|extern|const|volatile|register)\\s+)*(?:[\\w:<>\\[\\]]+\\s+)+(?P<name>[A-Za-z_][\\w$]*)\\s*\\(",
+      "body": "braces"
+    },
+    "if": {
+      "start": "^(\\s*)if\\s*\\(",
+      "body": "braces",
+      "alternate": ["else if", "else"]
+    },
+    "for": {
+      "start": "^(\\s*)for\\s*\\(",
+      "body": "braces"
+    },
+    "while": {
+      "start": "^(\\s*)while\\s*\\(",
+      "body": "braces"
+    }
+  }
+}

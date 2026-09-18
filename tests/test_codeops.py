@@ -25,6 +25,9 @@ class _Rec:
         self.root = Path(tempfile.mkdtemp())
         self.brain.ensure.return_value = (self._index(), {})
         self.brain.load.return_value = (self._index(), {})
+        self.config = MagicMock()
+        self.config.lang = "en"
+        self.config.priority_lang = ""
 
     def _index(self):
         return {"symbols": [

@@ -1,0 +1,6 @@
+{
+  "id": "php",
+  "name": "PHP",
+  "version": "1.0",
+  "extensions": [".php"]
+}

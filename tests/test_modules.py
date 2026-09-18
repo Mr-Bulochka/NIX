@@ -7,7 +7,15 @@ from nix.modules.engine import (
     render_template,
     scan_blocks,
 )
-from nix.modules import all_modules, module_for_file, load_module
+from nix.modules import (
+    all_modules,
+    is_module_enabled,
+    load_module,
+    module_for_ext,
+    module_for_file,
+    predict_priority_language,
+    set_enabled_modules,
+)
 
 
 class TestCodeModule(unittest.TestCase):
@@ -152,6 +160,79 @@ class TestEngineOps(unittest.TestCase):
         })
         self.assertIn('"A box."', rendered)
         self.assertIn("class Box(object):", rendered)
+
+
+class TestModuleSelection(unittest.TestCase):
+    def test_all_bundled_modules_load(self):
+        ids = [m.id for m in all_modules()]
+        expected = {"python", "javascript", "typescript", "java", "csharp",
+                    "go", "rust", "cpp", "c", "php"}
+        self.assertTrue(expected.issubset(set(ids)))
+
+    def test_module_for_file(self):
+        self.assertEqual(module_for_file("a.py"), "python")
+        self.assertEqual(module_for_file("a.js"), "javascript")
+        self.assertEqual(module_for_file("a.ts"), "typescript")
+        self.assertEqual(module_for_file("a.java"), "java")
+        self.assertEqual(module_for_file("a.cs"), "csharp")
+        self.assertEqual(module_for_file("a.go"), "go")
+        self.assertEqual(module_for_file("a.rs"), "rust")
+        self.assertEqual(module_for_file("a.cpp"), "cpp")
+        self.assertEqual(module_for_file("a.c"), "c")
+        self.assertEqual(module_for_file("a.php"), "php")
+        self.assertIsNone(module_for_file("a.unknownext"))
+
+    def test_module_for_ext_case_and_dot(self):
+        self.assertEqual(module_for_ext(".PY"), "python")
+        self.assertEqual(module_for_ext("py"), "python")
+
+
+class TestPriorityLanguage(unittest.TestCase):
+    def test_dominant_extension_wins(self):
+        self.assertEqual(
+            predict_priority_language({".py": 30, ".js": 10}), "python")
+
+    def test_ties_break_alphabetically(self):
+        self.assertEqual(
+            predict_priority_language({".py": 5, ".go": 5}), "go")
+
+    def test_unknown_extension_ignored(self):
+        self.assertIsNone(predict_priority_language({".zzz": 5}))
+
+    def test_empty_map(self):
+        self.assertIsNone(predict_priority_language({}))
+
+    def test_totals_across_suffixes(self):
+        self.assertEqual(
+            predict_priority_language(
+                {".py": 3, ".ts": 10, ".tsx": 4}), "typescript")
+
+
+class TestEnabledModules(unittest.TestCase):
+    def setUp(self):
+        set_enabled_modules(None)
+
+    def tearDown(self):
+        set_enabled_modules(None)
+
+    def test_none_enables_everything(self):
+        self.assertTrue(is_module_enabled("python"))
+        self.assertTrue(is_module_enabled("go"))
+        self.assertIn("go", [m.id for m in all_modules()])
+
+    def test_restrict_set(self):
+        set_enabled_modules(["python", "go"])
+        self.assertTrue(is_module_enabled("python"))
+        self.assertFalse(is_module_enabled("rust"))
+        ids = [m.id for m in all_modules()]
+        self.assertEqual(set(ids), {"python", "go"})
+        self.assertEqual(module_for_file("a.rs"), None)
+        self.assertEqual(module_for_file("a.py"), "python")
+
+    def test_empty_list_disables_everything(self):
+        set_enabled_modules([])
+        self.assertEqual(all_modules(), [])
+        self.assertFalse(is_module_enabled("python"))
 
 
 if __name__ == "__main__":

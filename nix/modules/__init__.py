@@ -13,7 +13,11 @@ from .loader import (
     BUNDLED_DIR,
     USER_MODULES_DIR,
     module_for_file,
+    module_for_ext,
     load_module,
+    predict_priority_language,
+    set_enabled_modules,
+    is_module_enabled,
 )
 from .engine import (
     Block,
@@ -29,7 +33,11 @@ __all__ = [
     "BUNDLED_DIR",
     "USER_MODULES_DIR",
     "module_for_file",
+    "module_for_ext",
     "load_module",
+    "predict_priority_language",
+    "set_enabled_modules",
+    "is_module_enabled",
     "Block",
     "find_block_at_line",
     "scan_blocks",

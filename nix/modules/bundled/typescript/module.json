@@ -1,0 +1,6 @@
+{
+  "id": "typescript",
+  "name": "TypeScript",
+  "version": "1.0",
+  "extensions": [".ts", ".tsx"]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "go",
+  "name": "Go",
+  "version": "1.0",
+  "extensions": [".go"]
+}

@@ -1,0 +1,30 @@
+{
+  "blocks": {
+    "function": {
+      "start": "^(\\s*)(?:(?:public|protected|private|static|final|synchronized|abstract|native|strictfp|default)\\s+)*(?:[\\w<>\\[\\]]+\\s+)+(?P<name>[A-Za-z_$][\\w$]*)\\s*\\(",
+      "body": "braces"
+    },
+    "class": {
+      "start": "^(\\s*)(?:(?:public|protected|private|abstract|final|static)\\s+)*class\\s+(?P<name>[A-Za-z_$][\\w$]*)",
+      "body": "braces"
+    },
+    "if": {
+      "start": "^(\\s*)if\\s*\\(",
+      "body": "braces",
+      "alternate": ["else if", "else"]
+    },
+    "for": {
+      "start": "^(\\s*)for\\s*\\(",
+      "body": "braces"
+    },
+    "while": {
+      "start": "^(\\s*)while\\s*\\(",
+      "body": "braces"
+    },
+    "try": {
+      "start": "^(\\s*)try\\s*\\{",
+      "body": "braces",
+      "alternate": ["catch", "finally"]
+    }
+  }
+}

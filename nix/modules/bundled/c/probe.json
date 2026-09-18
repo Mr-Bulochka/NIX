@@ -1,0 +1,9 @@
+{
+  "tests": [
+    {
+      "name": "find_function",
+      "source": "static int foo() {\n    return 0;\n}\n",
+      "blocks": [{"kind": "function", "name": "foo", "start": 1, "end": 3}]
+    }
+  ]
+}

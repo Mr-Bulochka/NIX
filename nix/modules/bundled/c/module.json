@@ -1,0 +1,6 @@
+{
+  "id": "c",
+  "name": "C",
+  "version": "1.0",
+  "extensions": [".c", ".h"]
+}

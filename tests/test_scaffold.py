@@ -82,6 +82,7 @@ class _Rec:
         self.config.attempts = 0
         self.config.max_attempts = 3
         self.config.lang = "en"
+        self.config.priority_lang = ""
         self.root = tmp
         self.brain = MagicMock()
         self.brain.load.return_value = (

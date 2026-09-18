@@ -153,6 +153,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "on": "on",
         "off": "off",
         "set.language": "Language",
+        "set.priority_lang": "Priority language",
+        "set.modules": "Code modules",
+        "set.auto": "Auto",
 
         # settings field validation
         "fb.int_invalid": "enter a whole number",
@@ -164,6 +167,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "scan.classes": "classes",
         "scan.lines": "lines",
         "scan.no_ext": "no extensions found",
+        "scan.priority": "primary language: {name}",
 
         # command descriptions
         "cmd.help.desc": "show this help",
@@ -505,6 +509,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "on": "вкл",
         "off": "выкл",
         "set.language": "Язык",
+        "set.priority_lang": "Приоритетный язык",
+        "set.modules": "Модули языков",
+        "set.auto": "Авто",
 
         # settings field validation
         "fb.int_invalid": "введите целое число",
@@ -516,6 +523,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "scan.classes": "классов",
         "scan.lines": "строк",
         "scan.no_ext": "расширений не найдено",
+        "scan.priority": "приоритетный язык: {name}",
 
         # command descriptions
         "cmd.help.desc": "показать помощь",
