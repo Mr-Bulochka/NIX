@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nix-agent"
+name = "cli-nix"
 version = "0.3.0"
 description = "NIX — local-first project-aware testing agent"
 readme = "README.md"
