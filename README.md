@@ -1,51 +1,114 @@
+<div align="center">
+
+<pre>
+    _   _______  __
+   / | / /  _/ |/ /
+  /  |/ // / |   / 
+ / /|  // / /   |  
+/_/ |_/___//_/|_|  
+</pre>
+
 # NIX — Local Project Testing Agent
 
-NIX is a local-first terminal agent that lives inside your project directory. It scans, analyzes, mutates, tests, and learns — all through a rich, modern TUI (Text User Interface) in the terminal.
+A local-first terminal agent that lives inside your project directory.
+It scans, analyzes, mutates, tests, and learns — all through a rich,
+modern TUI in the terminal.
+
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat&logo=python&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+![TUI](https://img.shields.io/badge/built_on-Textual-8BE9FD)
+
+</div>
+
+---
+
+## Screenshots
+
+| Main view with your pet | Project scan |
+|:---:|:---:|
+| ![Main](docs/screenshots/main.svg) | ![Scan](docs/screenshots/scan.svg) |
+
+| Pet panel | Status | Help |
+|:---:|:---:|:---:|
+| ![Pet](docs/screenshots/pet.svg) | ![Status](docs/screenshots/status.svg) | ![Help](docs/screenshots/help.svg) |
+
+> Screenshots are real headless renders of the actual TUI. Regenerate them
+> any time with [`scripts/make_screenshots.py`](scripts/make_screenshots.py).
+
+## Features
+
+- Full-screen terminal UI built on [Textual](https://github.com/Textualize/textual)
+  — like opencode or Claude Code
+- **Pet companion** — a tamagotchi that lives in your repo, evolves, and
+  gets a new skin every `pill` (8 skins, 30-minute cooldown)
+- **Language modules** — plain-data packs (no code) describing how blocks,
+  operations and generation work per language
+- **Project brain** — `.nix/brain/` index of functions/classes/patterns that
+  the pet rebuilds on demand (always fresher than the developer's memory)
+- **Read-only by default** — dry-runs for everything (scan, status, git,
+  gen, wrap, rename): nothing changes unless `--apply`
+- **Git companion** — status, diff, log, branch, auto-messaged commits,
+  remote info and optional `gh`/`glab` PR support
+- **IDE daemon** — headless JSON-line protocol over stdin/stdout or a socket
+- Chain commands on one line with `;` or `&&`
 
 ## Install
+
+### From a git clone (any platform)
 
 **Windows 10/11 + Python 3.11+**
 
 ```bat
+git clone https://github.com/Mr-Bulochka/NIX.git
+cd NIX
+python -m pip install -r requirements.txt
+python -m nix
+```
+
+**Linux / macOS + Python 3.11+**
+
+```bash
+git clone https://github.com/Mr-Bulochka/NIX.git
+cd NIX
+python3 -m pip install -r requirements.txt
+python3 -m nix
+```
+
+### From PyPI
+
+```bash
 pip install nix-local-agent
 nix
 ```
 
-Or install the latest release from GitHub (check **Releases** for the current
-`.whl`):
+### From the latest GitHub Release
 
-```bat
-pip install https://github.com/OWNER/NIX/releases/download/v0.3.0/nix_local_agent-0.3.0-py3-none-any.whl
-```
+Check the **Releases** tab for the current `.whl`, then:
 
-Or run straight from a clone of the repository (git) without installing:
-
-```bat
-git clone https://github.com/OWNER/NIX.git
-python -m pip install -r requirements.txt   # rich, textual
-python -m nix
-```
-
-## Quick Start
-
-**Windows 10/11 + Python 3.11+**
-
-```bat
-cd C:\MyProject
+```bash
+pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.0/nix_local_agent-0.3.0-py3-none-any.whl
 nix
 ```
 
-or run from the source:
+### Platform support
 
-```bat
-python -m nix
+NIX is pure Python (3.11+) with two cross-platform dependencies
+(`rich`, `textual`) — the same code runs on Windows, Linux and macOS.
+The `nix` console command is created by the package entry point and works
+everywhere; `nix.bat` in the repo root is just a Windows convenience
+launcher equivalent to `python -m nix`.
+
+## Quick Start
+
+```bash
+cd C:\MyProject        # or /home/you/myproject on Linux/macOS
+nix                    # or: python -m nix
 ```
 
 On first launch, NIX creates a `.nix/` directory and asks for your pet's name.
 
 ## The Interface
-
-NIX runs as a full-screen terminal application (built on [Textual](https://github.com/Textualize/textual)) — like opencode or Claude Code:
 
 - Header bar with project name, safety mode and live clock
 - Pet panel with animated idle spinner and stats
@@ -173,6 +236,23 @@ Pets evolve and get a **new random skin** when you give them a pill (once every
 30 minutes); the stage/pattern is always preserved. Each of the 8 skins has
 its own signature palette, so every pill is a visible transformation.
 
+## Learning how a project works
+
+NIX is interesting when it can *change* things. Try, in order:
+
+```text
+status          # what is here
+scan            # inventory (read-only)
+lang            # what languages live here
+ident           # how this project is written
+defs            # what functions/classes exist
+wrap src/app.py 12 in try      # dry-run proposed edit
+gen function login --into src/app.py   # preview a generated function
+recipe feature "my idea text"
+```
+
+Everything stays a dry-run until you add `--apply`.
+
 ## `.nix/` Structure
 
 ```
@@ -198,7 +278,7 @@ its own signature palette, so every pill is a visible transformation.
 
 ## Development
 
-```bat
+```bash
 pip install -e .
 python -m unittest discover -s tests -v
 python -m nix
@@ -206,13 +286,14 @@ python -m nix
 
 ## Build a release
 
-```bat
+```bash
 pip install build
 python -m build
 ```
 
 Produces `dist/nix_local_agent-<version>*.whl` and `.tar.gz` (the wheel embeds
-all bundled language modules).
+all bundled language modules). Attach both to a GitHub Release to let anyone
+`pip install` the program directly.
 
 ## License
 
