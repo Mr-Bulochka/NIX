@@ -78,7 +78,7 @@ python3 -m nix
 ### From PyPI
 
 ```bash
-pip install nix-local-agent
+pip install nix-agent
 nix
 ```
 
@@ -87,7 +87,7 @@ nix
 Check the **Releases** tab for the current `.whl`, then:
 
 ```bash
-pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.0/nix_local_agent-0.3.0-py3-none-any.whl
+pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.0/nix_agent-0.3.0-py3-none-any.whl
 nix
 ```
 
@@ -291,7 +291,7 @@ pip install build
 python -m build
 ```
 
-Produces `dist/nix_local_agent-<version>*.whl` and `.tar.gz` (the wheel embeds
+Produces `dist/nix_agent-<version>*.whl` and `.tar.gz` (the wheel embeds
 all bundled language modules). Attach both to a GitHub Release to let anyone
 `pip install` the program directly.
 
