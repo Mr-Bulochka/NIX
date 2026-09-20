@@ -15,7 +15,7 @@ It scans, analyzes, mutates, tests, and learns — all through a rich,
 modern TUI in the terminal.
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat&logo=python&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-MIT--0-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![TUI](https://img.shields.io/badge/built_on-Textual-8BE9FD)
 
@@ -297,7 +297,11 @@ all bundled language modules). Attach both to a GitHub Release to let anyone
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 MrBulochka.
+[MIT-0](LICENSE) — the code is free to use, copy, modify, merge, publish,
+distribute, sublicense, or sell, with **no obligations** to the author.
+
+That said, it would make my day if you mention the author or link to this
+repository — purely as a nice-to-have, never a requirement.
 
 ## Roadmap
 
