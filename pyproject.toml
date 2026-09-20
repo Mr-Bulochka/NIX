@@ -6,7 +6,21 @@ build-backend = "setuptools.build_meta"
 name = "nix-local-agent"
 version = "0.3.0"
 description = "NIX — local-first project-aware testing agent"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["cli", "tui", "testing", "agent", "textual", "code-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "rich>=13",
     "textual>=0.60",
@@ -15,5 +29,20 @@ dependencies = [
 [project.scripts]
 nix = "nix.cli:main"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 include = ["nix*"]
+
+[tool.setuptools.package-data]
+"nix.modules.bundled.c" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.cpp" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.csharp" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.go" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.java" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.javascript" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.php" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.python" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.rust" = ["*.json", "gen/*.tmpl"]
+"nix.modules.bundled.typescript" = ["*.json", "gen/*.tmpl"]
