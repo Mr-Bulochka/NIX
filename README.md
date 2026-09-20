@@ -2,6 +2,30 @@
 
 NIX is a local-first terminal agent that lives inside your project directory. It scans, analyzes, mutates, tests, and learns — all through a rich, modern TUI (Text User Interface) in the terminal.
 
+## Install
+
+**Windows 10/11 + Python 3.11+**
+
+```bat
+pip install nix-local-agent
+nix
+```
+
+Or install the latest release from GitHub (check **Releases** for the current
+`.whl`):
+
+```bat
+pip install https://github.com/OWNER/NIX/releases/download/v0.3.0/nix_local_agent-0.3.0-py3-none-any.whl
+```
+
+Or run straight from a clone of the repository (git) without installing:
+
+```bat
+git clone https://github.com/OWNER/NIX.git
+python -m pip install -r requirements.txt   # rich, textual
+python -m nix
+```
+
 ## Quick Start
 
 **Windows 10/11 + Python 3.11+**
@@ -179,6 +203,20 @@ pip install -e .
 python -m unittest discover -s tests -v
 python -m nix
 ```
+
+## Build a release
+
+```bat
+pip install build
+python -m build
+```
+
+Produces `dist/nix_local_agent-<version>*.whl` and `.tar.gz` (the wheel embeds
+all bundled language modules).
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 MrBulochka.
 
 ## Roadmap
 

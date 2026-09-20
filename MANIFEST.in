@@ -1,1 +1,2 @@
 recursive-include nix/modules/bundled *.json *.tmpl
+include LICENSE README.md requirements.txt
