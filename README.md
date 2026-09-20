@@ -27,11 +27,11 @@ modern TUI in the terminal.
 
 | Main view with your pet | Project scan |
 |:---:|:---:|
-| ![Main](docs/screenshots/main.svg) | ![Scan](docs/screenshots/scan.svg) |
+| ![Main](https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/main.svg) | ![Scan](https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/scan.svg) |
 
 | Pet panel | Status | Help |
 |:---:|:---:|:---:|
-| ![Pet](docs/screenshots/pet.svg) | ![Status](docs/screenshots/status.svg) | ![Help](docs/screenshots/help.svg) |
+| ![Pet](https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/pet.svg) | ![Status](https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/status.svg) | ![Help](https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/help.svg) |
 
 > Screenshots are real headless renders of the actual TUI. Regenerate them
 > any time with [`scripts/make_screenshots.py`](scripts/make_screenshots.py).
