@@ -953,6 +953,9 @@ def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_message("ERROR", app.t("fb.no_lang_mod", path=str(path)))
         return CommandResult()
     op_def = mod.ops.get(op_name)
+    if op_def is None and not op_name.startswith("wrap-in-"):
+        op_name = "wrap-in-" + op_name
+        op_def = mod.ops.get(op_name)
     if op_def is None:
         app.ui.show_message("ERROR", app.t(
             "fb.no_op", op=op_name, ops=", ".join(mod.ops)))

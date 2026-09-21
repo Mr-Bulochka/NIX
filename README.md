@@ -303,8 +303,8 @@ repository — purely as a nice-to-have, never a requirement.
 ## Roadmap
 
 - **Stage A** — Foundation + modern TUI (done)
-- **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (current)
-- **Stage C** — Mutation Engine + Sandbox + World Laws
+- **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (done)
+- **Stage C** — Mutation Engine + Sandbox + World Laws (current)
 - **Stage D** — Checkpoint Manager + Experience System
 - **Stage E** — Destructive Testing
 - **Stage F** — GitHub/GitLab Bridge

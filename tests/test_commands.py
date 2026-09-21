@@ -47,6 +47,19 @@ class _StubUI:
         pass
 
 
+class _RecordingUI(_StubUI):
+    def __init__(self):
+        self.errors = []
+        self.shown_code = []
+
+    def show_message(self, kind, text):
+        if kind == "ERROR":
+            self.errors.append(text)
+
+    def show_code(self, *args):
+        self.shown_code.append(args)
+
+
 class TestCommands(unittest.TestCase):
     def test_all_commands_registered(self):
         self.assertIn("help", COMMANDS)
@@ -143,6 +156,27 @@ class TestCommands(unittest.TestCase):
                 from nix.commands import cmd_scan
                 cmd_scan(app, [])
                 self.assertEqual(app.config.priority_lang, "go")
+            finally:
+                os.chdir(old)
+
+    def test_wrap_shorthand_op_name(self):
+        from nix.app import NixApp
+        from nix.commands import cmd_wrap
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                Path(tmp, "app.py").write_text(
+                    "def main():\n    print('hi')\n", encoding="utf-8")
+                app = NixApp()
+                ui = _RecordingUI()
+                app.ui = ui
+                app.pet = app.pet_store.create("Tester")
+                cmd_wrap(app, ["app.py", "2", "in", "try"])
+                self.assertEqual(ui.errors, [])
+                joined = " ".join(
+                    str(part) for args in ui.shown_code for part in args)
+                self.assertIn("try:", joined)
             finally:
                 os.chdir(old)
 
