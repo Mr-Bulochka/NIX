@@ -712,6 +712,8 @@ def cmd_checkpoint(app: "NixApp", args: list[str]) -> CommandResult:
             json.dumps(manifest, indent=2, ensure_ascii=False),
             encoding="utf-8")
         app.journal.write("CHECKPOINT", f"created {dest.name}")
+        if app.config.checkpoint_on_mutate:
+            app.mutations.reset_budget()
         app.ui.show_message("SYSTEM",
                             app.t("fb.checkpoint_created", name=dest.name))
         return CommandResult()
@@ -982,6 +984,10 @@ def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
         app.ui.show_code(f"{op_name} · {file_arg}:{line_no} · "
                          f"({app.t('fb.wrap_dry')})", preview)
         return CommandResult()
+    blocked = app.mutations.check_laws(path)
+    if blocked:
+        app.ui.show_message("ERROR", app.t("fb.law_blocked", law=blocked))
+        return CommandResult()
     try:
         original = "\n".join(src) + "\n"
         dest = app.state.nix / "brain" / "backups"
@@ -992,6 +998,7 @@ def cmd_wrap(app: "NixApp", args: list[str]) -> CommandResult:
         backup = dest / f"{stamp}-{digest}-{path.name}"
         backup.write_text(original, encoding="utf-8")
         path.write_text("\n".join(result) + "\n", encoding="utf-8")
+        app.mutations.record("wrap", path, backup)
     except OSError as exc:
         app.ui.show_message("ERROR", app.t("fb.failed", name="write", exc=exc))
         return CommandResult()
@@ -1122,6 +1129,10 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
     if not flags.get("apply"):
         app.ui.show_message("SYSTEM", app.t("fb.wrap_dry"))
         return CommandResult()
+    blocked = app.mutations.check_laws(path)
+    if blocked:
+        app.ui.show_message("ERROR", app.t("fb.law_blocked", law=blocked))
+        return CommandResult()
     try:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
@@ -1134,6 +1145,7 @@ def cmd_gen(app: "NixApp", args: list[str]) -> CommandResult:
             backup_name = backup.name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("".join(new_lines), encoding="utf-8")
+        app.mutations.record("gen", path, backup_name)
     except OSError as exc:
         app.ui.show_message("ERROR", app.t("fb.failed", name="write", exc=exc))
         return CommandResult()
@@ -1222,6 +1234,10 @@ def cmd_rename(app: "NixApp", args: list[str]) -> CommandResult:
         return CommandResult()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     for path, count, new_lines in changes:
+        blocked = app.mutations.check_laws(path)
+        if blocked:
+            app.ui.show_message("ERROR", app.t("fb.law_blocked", law=blocked))
+            continue
         try:
             import hashlib
             digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
@@ -1230,6 +1246,7 @@ def cmd_rename(app: "NixApp", args: list[str]) -> CommandResult:
             backup = backup_dir / f"{stamp}-rename-{digest}-{path.name}"
             backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
             path.write_text("".join(new_lines), encoding="utf-8")
+            app.mutations.record("rename", path, backup)
         except OSError as exc:
             app.ui.show_message("ERROR", app.t("fb.failed", name="rename", exc=exc))
             continue
@@ -1531,14 +1548,24 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
 
     # write model + crud
     if into:
-        _write_feature(app, into, model_code)
+        blocked = app.mutations.check_laws(app.root / into)
+        if blocked:
+            app.ui.show_message("ERROR",
+                                app.t("fb.law_blocked", law=blocked))
+            return CommandResult()
+        _write_feature(app, into, model_code, kind="make")
         app.ui.show_message("OK", app.t("fb.make_wrote",
                                         entity=entity, path=into))
 
     # write tests
     if test_code:
         target = test_into or f"test_{entity}.py"
-        _write_feature(app, target, test_code)
+        blocked = app.mutations.check_laws(app.root / target)
+        if blocked:
+            app.ui.show_message("ERROR",
+                                app.t("fb.law_blocked", law=blocked))
+            return CommandResult()
+        _write_feature(app, target, test_code, kind="test")
         app.ui.show_message("OK", app.t("fb.make_wrote_test",
                                         path=target))
 
@@ -1549,8 +1576,10 @@ def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-def _write_feature(app: "NixApp", filepath: str, content: str) -> None:
+def _write_feature(app: "NixApp", filepath: str, content: str,
+                   kind: str = "feature") -> None:
     path = Path(filepath)
+    bak: Path | None = None
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         stamp = utc_now_iso().replace(":", "").replace("-", "")[:15]
@@ -1559,6 +1588,7 @@ def _write_feature(app: "NixApp", filepath: str, content: str) -> None:
         bak.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, bak)
     path.write_text(content, encoding="utf-8")
+    app.mutations.record(kind, path, bak or "-")
 
 
 @register("testgen", "generate test stubs from brain index",
@@ -1649,7 +1679,11 @@ def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
         return CommandResult()
 
     out_path = into or f"test_{module_name}.py"
-    _write_feature(app, out_path, test_code)
+    blocked = app.mutations.check_laws(app.root / out_path)
+    if blocked:
+        app.ui.show_message("ERROR", app.t("fb.law_blocked", law=blocked))
+        return CommandResult()
+    _write_feature(app, out_path, test_code, kind="testgen")
     app.ui.show_message("OK", app.t("fb.testgen_wrote", path=out_path))
     app.journal.write("TESTGEN", f"testgen {target}")
     if app.pet:
@@ -1733,4 +1767,39 @@ def cmd_recipe(app: "NixApp", args: list[str]) -> CommandResult:
             return result
 
     app.journal.write("RECIPE", f"recipe {name}")
+    return CommandResult()
+
+
+@register("laws", "show world laws", "laws")
+def cmd_laws(app: "NixApp", args: list[str]) -> CommandResult:
+    budget = app.config.mutation_budget
+    used = app.mutations.count
+    left = app.mutations.remaining()
+    checkpoint = app.config.checkpoint_on_mutate
+    protected = ", ".join(
+        str(p) for p in (app.config.protected_paths or [])) or "-"
+    rows = [
+        ("mutation_budget", f"{budget} (used {used}, {left} left)",
+         YELLOW),
+        ("checkpoint_on_mutate", "on" if checkpoint else "off",
+         GREEN if checkpoint else FG),
+        ("protected_paths", protected, CYAN),
+    ]
+    app.ui.show_block(app.t("tbl.laws"), rows)
+    return CommandResult()
+
+
+@register("mutations", "show mutation history", "mutations")
+def cmd_mutations(app: "NixApp", args: list[str]) -> CommandResult:
+    records = app.mutations.records
+    if not records:
+        app.ui.show_message("SYSTEM", app.t("fb.mutations_none"))
+        return CommandResult()
+    rows = [
+        (rec.get("ts", "")[:19],
+         f"{rec.get('kind', '?')} · {rec.get('target', '?')}",
+         FG)
+        for rec in reversed(records[-40:])
+    ]
+    app.ui.show_block(app.t("tbl.mutations"), rows)
     return CommandResult()

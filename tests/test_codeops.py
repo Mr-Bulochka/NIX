@@ -12,8 +12,27 @@ def _fire(app_rec, name, args):
     get_command(name).handler(app_rec, args)
 
 
+class _FakeMutations:
+    def __init__(self):
+        self.records = []
+
+    def check_laws(self, path):
+        return None
+
+    def record(self, kind, target, backup):
+        self.records.append({"kind": kind, "target": str(target), "backup": str(backup)})
+
+    @property
+    def count(self):
+        return len(self.records)
+
+    def remaining(self):
+        return 10
+
+
 class _Rec:
     def __init__(self):
+        self.mutations = _FakeMutations()
         self.seen = []
         self.ui = _UI(self)
         self.t = _T().t

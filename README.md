@@ -45,6 +45,9 @@ modern TUI in the terminal.
   the pet rebuilds on demand (always fresher than the developer's memory)
 - **Read-only by default** — dry-runs for everything (scan, status, git,
   gen, wrap, rename): nothing changes unless `--apply`
+- **World laws + mutation engine** — every write is checked against the
+  sandbox's world laws (protected paths, budgets) and each applied mutation
+  is recorded (`laws`, `mutations`)
 - **Git companion** — status, diff, log, branch, auto-messaged commits,
   remote info and optional `gh`/`glab` PR support
 - **IDE daemon** — headless JSON-line protocol over stdin/stdout or a socket
@@ -84,7 +87,7 @@ nix
 Check the **Releases** tab for the current `.whl`, then:
 
 ```bash
-pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.0/cli_nix-0.3.0-py3-none-any.whl
+pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.3/cli_nix-0.3.3-py3-none-any.whl
 nix
 ```
 
@@ -174,6 +177,8 @@ generation work in a given language. Bundled modules live in
 | `recipe [list\|<name>] [--apply] [args...]` | Run named command chains; built-ins: `feature`, `scaffold`, `test`; user recipes live in `.nix/recipes.json` (`{0}`, `{1}`, ... are positional args; re-run with `--apply` to write) |
 | `rename <old> <new> [--file f] [--apply]` | Project-wide symbolic rename (dry-run unless `--apply`) |
 | `ident` | Show the project's identity patterns (naming, docstrings, ...) |
+| `laws` | Show sandbox world laws and limits |
+| `mutations` | Show recent mutation engine records |
 
 ### Version control companion
 
@@ -304,7 +309,7 @@ repository — purely as a nice-to-have, never a requirement.
 
 - **Stage A** — Foundation + modern TUI (done)
 - **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (done)
-- **Stage C** — Mutation Engine + Sandbox + World Laws (current)
+- **Stage C** — Mutation Engine + Sandbox + World Laws (done)
 - **Stage D** — Checkpoint Manager + Experience System
 - **Stage E** — Destructive Testing
 - **Stage F** — GitHub/GitLab Bridge

@@ -79,7 +79,7 @@ class TestCommands(unittest.TestCase):
                      "todo", "note", "memory", "journal", "tag",
                      "checkpoint", "save", "echo", "time", "which", "stats",
                      "module", "defs", "blocks", "wrap", "gen", "ident",
-                     "rename", "git", "remote"):
+                     "rename", "git", "remote", "laws", "mutations"):
             self.assertIn(name, COMMANDS)
 
     def test_get_command(self):
@@ -204,6 +204,107 @@ class TestCommands(unittest.TestCase):
                 self.assertNotEqual(app.pet["skin"], first_skin)
             finally:
                 os.chdir(old)
+
+    def test_cmd_laws_rows(self):
+        from types import SimpleNamespace
+
+        from nix.commands import cmd_laws
+
+        class UI:
+            def __init__(self):
+                self.blocks = []
+
+            def show_block(self, title, rows):
+                self.blocks.append((title, list(rows)))
+
+        ui = UI()
+        app = SimpleNamespace(
+            t=lambda key, **kw: key,
+            config=SimpleNamespace(
+                mutation_budget=10,
+                checkpoint_on_mutate=True,
+                protected_paths=["nix/", "tests/"],
+            ),
+            mutations=SimpleNamespace(
+                count=4,
+                remaining=lambda: 6,
+                records=[],
+            ),
+            ui=ui,
+        )
+        cmd_laws(app, [])
+        self.assertEqual(len(ui.blocks), 1)
+        title, rows = ui.blocks[0]
+        self.assertEqual(title, "tbl.laws")
+        self.assertEqual(len(rows), 3)
+        labels = [r[0] for r in rows]
+        self.assertEqual(labels, ["mutation_budget", "checkpoint_on_mutate", "protected_paths"])
+        self.assertIn("10", rows[0][1])
+        self.assertIn("nix/", rows[2][1])
+
+    def test_cmd_mutations_empty(self):
+        from types import SimpleNamespace
+
+        from nix.commands import cmd_mutations
+
+        class UI:
+            def __init__(self):
+                self.messages = []
+                self.blocks = []
+
+            def show_message(self, kind, text):
+                self.messages.append((kind, text))
+
+            def show_block(self, title, rows):
+                self.blocks.append((title, list(rows)))
+
+        ui = UI()
+        app = SimpleNamespace(
+            t=lambda key, **kw: key,
+            mutations=SimpleNamespace(count=0, remaining=lambda: 10, records=[]),
+            ui=ui,
+        )
+        cmd_mutations(app, [])
+        self.assertEqual(ui.messages, [("SYSTEM", "fb.mutations_none")])
+        self.assertEqual(ui.blocks, [])
+
+    def test_cmd_mutations_rows(self):
+        from types import SimpleNamespace
+
+        from nix.commands import cmd_mutations
+
+        class UI:
+            def __init__(self):
+                self.messages = []
+                self.blocks = []
+
+            def show_message(self, kind, text):
+                self.messages.append((kind, text))
+
+            def show_block(self, title, rows):
+                self.blocks.append((title, list(rows)))
+
+        ui = UI()
+        app = SimpleNamespace(
+            t=lambda key, **kw: key,
+            mutations=SimpleNamespace(
+                count=2,
+                remaining=lambda: 8,
+                records=[
+                    {"ts": "2026-01-01T00:00:00", "kind": "wrap", "target": "app.py"},
+                    {"ts": "2026-01-02T00:00:00", "kind": "gen", "target": "x.py"},
+                ],
+            ),
+            ui=ui,
+        )
+        cmd_mutations(app, [])
+        self.assertEqual(ui.messages, [])
+        self.assertEqual(len(ui.blocks), 1)
+        title, rows = ui.blocks[0]
+        self.assertEqual(title, "tbl.mutations")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0][1], "gen · x.py")
+        self.assertEqual(rows[1][1], "wrap · app.py")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from .journal import Journal
 from .logger import SessionLogger
 from .pet import Pet
 from .state import State, utc_now_ts
+from .mutation import MutationEngine
 
 PILL_COOLDOWN = 30 * 60
 
@@ -87,6 +88,7 @@ class NixApp:
         self.pet = self.pet_store.load()
 
         self.brain = Brain(self.state.nix, self.root)
+        self.mutations = MutationEngine(self)
 
     def run(self) -> None:
         from .ui import NixUI

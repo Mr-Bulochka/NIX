@@ -32,7 +32,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # session
         "session.started": "session started  root={root}",
-        "session.foundation": "stage A foundation  ·  mutation engine disabled",
+        "session.foundation": "stage A foundation  ·  mutation engine enabled",
         "session.hint": "type help or press buttons below",
         "pet.created": "pet created: {name}",
         "pet.no_pet": "no pet yet",
@@ -361,6 +361,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.recipe": "Recipes",
         "tbl.recipe_name": "Name",
         "tbl.recipe_template": "Template",
+
+        # laws / mutations
+        "cmd.laws.desc": "show sandbox world laws and limits",
+        "cmd.mutations.desc": "show recent mutation engine records",
+        "fb.law_blocked": "blocked by world law: {law}",
+        "fb.mutations_none": "no mutations recorded yet",
+        "tbl.laws": "Sandbox world laws",
+        "tbl.law_name": "Law",
+        "tbl.law_value": "Value",
+        "tbl.mutations": "Recent mutations",
     },
     "ru": {
         # first launch
@@ -388,7 +398,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # session
         "session.started": "сессия начата  root={root}",
-        "session.foundation": "фундамент этапа A · движок мутаций выключен",
+        "session.foundation": "фундамент этапа A · движок мутаций включён",
         "session.hint": "наберите help или нажмите кнопки ниже",
         "pet.created": "питомец создан: {name}",
         "pet.no_pet": "питомца ещё нет",
@@ -717,6 +727,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.recipe": "Рецепты",
         "tbl.recipe_name": "Имя",
         "tbl.recipe_template": "Шаблон",
+
+        # laws / mutations
+        "cmd.laws.desc": "показать законы и лимиты песочницы",
+        "cmd.mutations.desc": "показать последние записи движка мутаций",
+        "fb.law_blocked": "заблокировано законом: {law}",
+        "fb.mutations_none": "мутаций пока не записано",
+        "tbl.laws": "Законы песочницы",
+        "tbl.law_name": "Закон",
+        "tbl.law_value": "Значение",
+        "tbl.mutations": "Последние мутации",
     },
 }
 
