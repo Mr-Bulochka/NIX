@@ -87,7 +87,19 @@ class MutationEngine:
         pet = self.app.pet
         if pet is not None:
             pet["mutations_witnessed"] = pet.get("mutations_witnessed", 0) + 1
+            add_xp = getattr(self.app, "add_pet_xp", None)
+            if callable(add_xp):
+                try:
+                    add_xp(15, "mutation", save=False)
+                except Exception:
+                    pass
             self.app.pet_store.save(pet)
+        if self.app.config.checkpoint_on_mutate:
+            try:
+                self.app.checkpoints.create("auto-" + kind, silent=True)
+                self.app.mutations.reset_budget()
+            except Exception:
+                pass
 
     def reset_budget(self) -> None:
         data = self._load()

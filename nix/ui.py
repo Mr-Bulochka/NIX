@@ -794,6 +794,7 @@ class NixUI(App):
                     yield Label("", id="st-mood", classes="stat")
                     yield Label("", id="st-energy", classes="stat")
                     yield Label("", id="st-stage", classes="stat")
+                    yield Label("", id="st-xp", classes="stat")
             with VerticalScroll(id="logwrap"):
                 yield RichLog(id="log", wrap=True, markup=True,
                               highlight=True, auto_scroll=True)
@@ -949,6 +950,7 @@ class NixUI(App):
             self._set_stat("#st-mood", "", DIM)
             self._set_stat("#st-energy", "", DIM)
             self._set_stat("#st-stage", "", DIM)
+            self._set_stat("#st-xp", "", DIM)
             return
 
         pattern = pet.get("body_pattern", "seed")
@@ -982,6 +984,14 @@ class NixUI(App):
             "#st-stage",
             f"{self._t('pet.stage')}: {pattern_label}  \u00b7  "
             f"{self._t('pet.age')} {age}",
+            DIM,
+        )
+        xp = int(pet.get("xp", 0))
+        level = int(pet.get("level", 1))
+        self._set_stat(
+            "#st-xp",
+            f"{self._t('pet.xp')}: {xp}/{50 * level}  \u00b7  "
+            f"{self._t('pet.level')} {level}",
             DIM,
         )
         box.update(art)
@@ -1126,6 +1136,8 @@ class NixUI(App):
             (t("pet.age"), str(pet.get("age", 0)), FG),
             (t("pet.body"), t(f"pet.pattern.{pattern}"), PURPLE),
             (t("pet.stage"), str(pet.get("stage", 1)), FG),
+            (t("pet.xp"), f"{pet.get('xp', 0)}/{50 * int(pet.get('level', 1))}", FG),
+            (t("pet.level"), str(pet.get("level", 1)), FG),
             (t("pet.mutations"), str(pet.get("mutations_witnessed", 0)), YELLOW),
             (t("pet.failures"), str(pet.get("failures_survived", 0)), RED),
             (t("pet.scans"), str(pet.get("scans", 0)), CYAN),

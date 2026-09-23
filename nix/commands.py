@@ -685,43 +685,58 @@ def cmd_save(app: "NixApp", args: list[str]) -> CommandResult:
     return CommandResult()
 
 
-@register("checkpoint", "list or create checkpoints", "checkpoint [name]")
+@register("checkpoint", "create, list, inspect, promote, restore or delete checkpoints",
+          "checkpoint [create|list|info|promote|restore|delete] [name]")
 def cmd_checkpoint(app: "NixApp", args: list[str]) -> CommandResult:
     flags, rest = parse_flags(args)
-    tmp = app.state.nix / "checkpoints" / "temporary"
-    perm = app.state.nix / "checkpoints" / "permanent"
-    if rest:
-        name = rest[0]
-        slug = re.sub(r"[^A-Za-z0-9\-_]", "-", name).strip("-") or "manual"
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        dest = tmp / f"{ts}-{slug}"
-        try:
-            dest.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            app.ui.show_message("ERROR", app.t("fb.failed", name="checkpoint",
-                                               exc=exc))
-            return CommandResult()
-        manifest = {
-            "created": utc_now_iso(),
-            "root": str(app.root),
-            "mode": app.config.mode,
-            "stage": (app.pet or {}).get("body_pattern", "seed"),
-            "skin": (app.pet or {}).get("skin"),
-        }
-        (dest / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False),
-            encoding="utf-8")
-        app.journal.write("CHECKPOINT", f"created {dest.name}")
-        if app.config.checkpoint_on_mutate:
-            app.mutations.reset_budget()
-        app.ui.show_message("SYSTEM",
-                            app.t("fb.checkpoint_created", name=dest.name))
+    if not rest:
+        return _checkpoint_list(app)
+    cmd, *argv = rest
+    if cmd == "create":
+        app.checkpoints.create(argv[0] if argv else "manual")
         return CommandResult()
-    rows = []
-    for kind_path, kind in ((tmp, "temp"), (perm, "permanent")):
-        for p in sorted(kind_path.glob("*")):
-            if p.is_dir():
-                rows.append((p.name, kind, CYAN))
+    if cmd == "list":
+        return _checkpoint_list(app)
+    if cmd == "info":
+        if not argv:
+            app.ui.show_message("ERROR", app.t("fb.missing_arg"))
+            return CommandResult()
+        info = app.checkpoints.info(argv[0])
+        if info is None:
+            app.ui.show_message("ERROR",
+                                app.t("fb.no_such_checkpoint", name=argv[0]))
+            return CommandResult()
+        rows = [(key, str(value), CYAN) for key, value in info.items()
+                if key != "files" and value not in (None, "")]
+        rows.append(("files", str(len(info.get("files", []))), CYAN))
+        app.ui.show_block(app.t("tbl.checkpoints"), rows)
+        return CommandResult()
+    if cmd == "promote":
+        if not argv:
+            app.ui.show_message("ERROR", app.t("fb.missing_arg"))
+            return CommandResult()
+        app.ui.show_message("SYSTEM", app.checkpoints.promote(argv[0]))
+        return CommandResult()
+    if cmd == "delete":
+        if not argv:
+            app.ui.show_message("ERROR", app.t("fb.missing_arg"))
+            return CommandResult()
+        app.ui.show_message("SYSTEM", app.checkpoints.delete(argv[0]))
+        return CommandResult()
+    if cmd == "restore":
+        if not argv:
+            app.ui.show_message("ERROR", app.t("fb.missing_arg"))
+            return CommandResult()
+        msg = app.checkpoints.restore(argv[0], force=bool(flags.get("force")),
+                                      dry=bool(flags.get("dry")))
+        app.ui.show_message("SYSTEM", msg)
+        return CommandResult()
+    app.checkpoints.create(cmd)
+    return CommandResult()
+
+
+def _checkpoint_list(app: "NixApp") -> CommandResult:
+    rows = [(name, kind, CYAN) for name, kind in app.checkpoints.list()]
     if not rows:
         app.ui.show_message("SYSTEM", app.t("fb.no_checkpoints"))
         return CommandResult()

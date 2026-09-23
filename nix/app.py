@@ -10,6 +10,7 @@ from .journal import Journal
 from .logger import SessionLogger
 from .pet import Pet
 from .state import State, utc_now_ts
+from .checkpoints import CheckpointManager
 from .mutation import MutationEngine
 
 PILL_COOLDOWN = 30 * 60
@@ -89,6 +90,7 @@ class NixApp:
 
         self.brain = Brain(self.state.nix, self.root)
         self.mutations = MutationEngine(self)
+        self.checkpoints = CheckpointManager(self)
 
     def run(self) -> None:
         from .ui import NixUI
@@ -131,6 +133,24 @@ class NixApp:
         except Exception:
             pass
         return True, self.t("fb.pill_given", skin=self.t(f"skin.{new_skin}"))
+
+    def add_pet_xp(self, amount: int, event: str = "activity", save: bool = True) -> bool:
+        pet = self.pet
+        if pet is None:
+            return False
+        before = pet.get("level", 1)
+        self.pet_store.add_xp(pet, amount)
+        after = pet.get("level", 1)
+        if after > before:
+            self.journal.write("LEVEL", f"level {before} -> {after} ({event})")
+            try:
+                if getattr(self, "ui", None):
+                    self.ui.show_message("SYSTEM", self.t("fb.level_up", level=after))
+            except Exception:
+                pass
+        if save:
+            self.pet_store.save(pet)
+        return True
 
     def handle_command(self, raw: str) -> bool:
         raw = raw.strip()
@@ -183,6 +203,7 @@ class NixApp:
         except Exception as exc:
             self.ui.show_message("ERROR", self.t("fb.failed", name=name, exc=exc))
             self.session_logger.write("ERROR", f"/{name} failed: {exc}")
+            self.add_pet_xp(2, "failure", save=True)
             return True
 
         if result.message:

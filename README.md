@@ -48,6 +48,9 @@ modern TUI in the terminal.
 - **World laws + mutation engine** — every write is checked against the
   sandbox's world laws (protected paths, budgets) and each applied mutation
   is recorded (`laws`, `mutations`)
+- **Checkpoint manager + pet XP** — snapshot and restore project checkpoints
+  (`checkpoint`, permanent/temporary, with protection and backup files);
+  every checkpoint and mutation earns the pet experience (`pet`, `status`)
 - **Git companion** — status, diff, log, branch, auto-messaged commits,
   remote info and optional `gh`/`glab` PR support
 - **IDE daemon** — headless JSON-line protocol over stdin/stdout or a socket
@@ -87,7 +90,7 @@ nix
 Check the **Releases** tab for the current `.whl`, then:
 
 ```bash
-pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.3/cli_nix-0.3.3-py3-none-any.whl
+pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.4/cli_nix-0.3.4-py3-none-any.whl
 nix
 ```
 
@@ -310,7 +313,7 @@ repository — purely as a nice-to-have, never a requirement.
 - **Stage A** — Foundation + modern TUI (done)
 - **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (done)
 - **Stage C** — Mutation Engine + Sandbox + World Laws (done)
-- **Stage D** — Checkpoint Manager + Experience System
+- **Stage D** — Checkpoint Manager + Experience System (done)
 - **Stage E** — Destructive Testing
 - **Stage F** — GitHub/GitLab Bridge
 - **Stage G** — Tamagotchi Evolution

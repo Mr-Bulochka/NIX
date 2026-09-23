@@ -9,6 +9,8 @@ DEFAULT_PET = {
     "body_pattern": "seed",
     "mood": "curious",
     "energy": 100,
+    "xp": 0,
+    "level": 1,
     "age": 0,
     "evolution_level": 0,
     "mutations_witnessed": 0,
@@ -28,6 +30,10 @@ STAGES = {
 }
 
 STAGE_AGE_LIMITS = [("mystic", 35), ("bloom", 15), ("sprout", 5)]
+
+
+def xp_to_next(level: int) -> int:
+    return 50 * level
 
 
 class Pet:
@@ -61,6 +67,13 @@ class Pet:
             encoding="utf-8",
         )
 
+    def add_xp(self, pet: dict, amount: int) -> dict:
+        pet["xp"] = pet.get("xp", 0) + amount
+        while pet["xp"] >= xp_to_next(pet.get("level", 1)):
+            pet["xp"] -= xp_to_next(pet["level"])
+            pet["level"] = pet.get("level", 1) + 1
+        return pet
+
     def update_mood(self, pet: dict, event: str) -> dict:
         mood_transitions = {
             "success": {"curious": "happy", "tired": "content", "anxious": "relieved"},
@@ -68,6 +81,7 @@ class Pet:
             "error": {"happy": "worried", "curious": "cautious"},
             "scan": {"curious": "focused"},
             "idle": {"focused": "curious", "alert": "curious"},
+            "level_up": {"curious": "happy", "thoughtful": "happy", "determined": "happy", "alert": "happy"},
         }
         transitions = mood_transitions.get(event, {})
         current = pet.get("mood", "curious")
