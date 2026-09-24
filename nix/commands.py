@@ -209,14 +209,14 @@ def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
     for title, names in (
         (app.t("help.grp.core"), ["help", "version", "pwd", "time", "echo", "which"]),
         (app.t("help.grp.project"),
-         ["scan", "status", "stats", "tree", "ls", "lang", "tests",
+         ["scan", "status", "stats", "tree", "ls", "lang", "tests", "run",
           "deps", "find", "todo"]),
          (app.t("help.grp.code"),
           ["module", "defs", "blocks", "wrap", "gen", "rename", "ident",
            "make", "testgen", "recipe"]),
         (app.t("help.grp.pet"), ["pet", "pill", "settings", "tag"]),
         (app.t("help.grp.memory"), ["note", "memory", "journal"]),
-        (app.t("help.grp.safety"), ["mode", "attempts", "save"]),
+        (app.t("help.grp.safety"), ["mode", "attempts", "save", "destruct"]),
         (app.t("help.grp.git"), ["git", "remote"]),
         (app.t("help.grp.system"), ["logs", "history", "checkpoint",
                                     "clear", "quit"]),
@@ -418,6 +418,44 @@ def cmd_tests(app: "NixApp", args: list[str]) -> CommandResult:
     app.ui.show_tree(app.t("tbl.tests"), found)
     app.ui.show_message("SYSTEM",
                         app.t("fb.test_summary", files=n_files, funcs=n_funcs))
+    return CommandResult()
+
+
+@register("run", "run all tests", "run [--timeout N]")
+def cmd_run(app):
+    flags = parse_flags(app.args, {"timeout"})
+    from .runner import DEFAULT_TIMEOUT, run_tests
+    timeout = _num(flags.get("timeout"), DEFAULT_TIMEOUT)
+    app.ui.show_message("SYSTEM", app.t("run.start"))
+    run = run_tests(app.root, timeout=timeout)
+    fail = run.failed + run.errors
+    if not run.passed and not fail:
+        app.ui.show_message("AWARE", app.t("fb.run_no_tests"))
+        return CommandResult()
+    if run.ok:
+        app.add_pet_xp(5, "run")
+    else:
+        app.add_pet_xp(2, "run")
+    if run.timed_out:
+        detail = app.t("fb.run_timeout", timeout=timeout)
+    elif run.ok:
+        detail = app.t("fb.run_ok", passed=run.passed)
+    else:
+        detail = app.t("fb.run_failed", passed=run.passed, failed=fail)
+    app.ui.show_block(
+        app.t("tbl.run"),
+        [
+            ("passed", run.passed, GREEN),
+            ("failed", fail, FG),
+            ("errors", run.errors, FG),
+            ("skipped", run.skipped, FG),
+            ("duration", "{:.2f}s".format(run.duration), FG),
+            ("returncode", run.returncode, FG),
+            ("detail", detail, CYAN if run.ok else YELLOW),
+        ],
+    )
+    if not run.ok:
+        app.ui.show_code(app.t("run.tail"), run.tail)
     return CommandResult()
 
 
@@ -741,6 +779,64 @@ def _checkpoint_list(app: "NixApp") -> CommandResult:
         app.ui.show_message("SYSTEM", app.t("fb.no_checkpoints"))
         return CommandResult()
     app.ui.show_block(app.t("tbl.checkpoints"), rows)
+    return CommandResult()
+
+
+@register("destruct", "mutate code and verify tests catch it", "destruct [--apply] [--keep] [--timeout N] [--max N]")
+def cmd_destruct(app):
+    flags = parse_flags(app.args, {"apply", "keep", "timeout", "max"})
+    max_mutations = _num(flags.get("max"), 0) or None
+    keep = bool(flags.get("keep"))
+    from .destruct import plan_mutations, run_destruct
+    from .runner import DEFAULT_TIMEOUT
+    if "apply" not in flags:
+        plan = plan_mutations(app.root, max_mutations)
+        if not plan:
+            app.ui.show_message("AWARE", app.t("fb.destruct_no_plan"))
+            return CommandResult()
+        app.ui.show_block(
+            app.t("tbl.destruct"),
+            [(p["rel"], p["operator"], CYAN) for p in plan],
+        )
+        app.ui.show_message("SYSTEM", app.t("fb.destruct_dry", n=len(plan)))
+        return CommandResult()
+    report = run_destruct(app, timeout=_num(flags.get("timeout"), DEFAULT_TIMEOUT), max_mutations=max_mutations, keep=keep)
+    if not report.candidates:
+        app.ui.show_message("AWARE", app.t("fb.destruct_no_plan"))
+        return CommandResult()
+    if report.baseline.no_tests:
+        app.ui.show_message("AWARE", app.t("fb.destruct_no_tests"))
+        return CommandResult()
+    if report.baseline.killed:
+        app.ui.show_message(
+            "AWARE",
+            app.t("fb.destruct_baseline_failed", passed=report.baseline.passed, failed=report.baseline.failed + report.baseline.errors),
+        )
+        return CommandResult()
+    killed = survived = blocked = errors = 0
+    rows = []
+    for p in report.candidates:
+        status = p.get("status")
+        if status == "killed":
+            color, killed = GREEN, killed + 1
+        elif status == "blocked":
+            color, blocked = YELLOW, blocked + 1
+        elif status == "error":
+            color, errors = FG, errors + 1
+        else:
+            color, survived = FG, survived + 1
+        rows.append((p["rel"], p.get("detail", "?"), color))
+    app.ui.show_block(app.t("tbl.destruct"), rows)
+    app.ui.show_message(
+        "SYSTEM",
+        app.t("fb.destruct_summary", killed=killed, survived=survived, blocked=blocked, errors=errors),
+    )
+    if report.kept:
+        app.ui.show_message("SYSTEM", app.t("destruct.kept"))
+        if report.checkpoint:
+            app.ui.show_message("SYSTEM", app.t("destruct.backup", path=report.checkpoint))
+    for msg in report.items:
+        app.ui.show_message("SYSTEM", msg)
     return CommandResult()
 
 
