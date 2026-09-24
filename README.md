@@ -26,12 +26,12 @@ modern TUI in the terminal.
 ## Screenshot
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/main.jpg"
+  <img src="https://raw.githubusercontent.com/Mr-Bulochka/NIX/master/docs/screenshots/main.svg"
        alt="NIX main screen" width="820">
 </p>
 
 > Live main view of the TUI — pet panel, buttons, event log and command
-> input. A real headless render of the actual app, exported as a JPG.
+> input. A real headless render of the actual app, exported as an SVG.
 
 ## Features
 
@@ -90,7 +90,7 @@ nix
 Check the **Releases** tab for the current `.whl`, then:
 
 ```bash
-pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.4/cli_nix-0.3.4-py3-none-any.whl
+pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.5/cli_nix-0.3.5-py3-none-any.whl
 nix
 ```
 
@@ -137,6 +137,7 @@ several commands in a single line with `;` or `&&`.
 | `ls [path] [--all] [--size]` | List a directory |
 | `lang [--top N]` | Detect languages in the project |
 | `tests [--max N] [--count]` | Find test files and functions |
+| `run [--timeout N]` | Run all tests |
 | `deps [--top N]` | Collect imported modules |
 | `find <name> [--ext py,js]` | Search files by name |
 | `todo [--max N]` | Scan code for TODO/FIXME |
@@ -182,6 +183,7 @@ generation work in a given language. Bundled modules live in
 | `ident` | Show the project's identity patterns (naming, docstrings, ...) |
 | `laws` | Show sandbox world laws and limits |
 | `mutations` | Show recent mutation engine records |
+| `destruct [--apply] [--keep] [--timeout N] [--max N]` | Destructive testing: mutate the project and verify tests catch it (dry-run unless `--apply`) |
 
 ### Version control companion
 
@@ -314,7 +316,7 @@ repository — purely as a nice-to-have, never a requirement.
 - **Stage B** — Code modules + project brain: structural engine, `defs`/`blocks`/`wrap`/`gen`/`rename` + `git` companion (done)
 - **Stage C** — Mutation Engine + Sandbox + World Laws (done)
 - **Stage D** — Checkpoint Manager + Experience System (done)
-- **Stage E** — Destructive Testing
+- **Stage E** — Destructive Testing (done)
 - **Stage F** — GitHub/GitLab Bridge
 - **Stage G** — Tamagotchi Evolution
 - **Stage H** — Full TUI polish
