@@ -60,7 +60,18 @@ modern TUI in the terminal.
 
 ### From a git clone (any platform)
 
-**Windows 10/11 + Python 3.11+**
+**uv (fast, recommended) — Python 3.11+ on any platform**
+
+```bash
+git clone https://github.com/Mr-Bulochka/NIX.git
+cd NIX
+uv sync
+uv run nix          # or: uv run python -m nix
+```
+
+**Alternative — plain pip (Python 3.11+)**
+
+Windows 10/11:
 
 ```bat
 git clone https://github.com/Mr-Bulochka/NIX.git
@@ -69,7 +80,7 @@ python -m pip install -r requirements.txt
 python -m nix
 ```
 
-**Linux / macOS + Python 3.11+**
+Linux / macOS:
 
 ```bash
 git clone https://github.com/Mr-Bulochka/NIX.git
@@ -286,16 +297,15 @@ Everything stays a dry-run until you add `--apply`.
 ## Development
 
 ```bash
-pip install -e .
-python -m unittest discover -s tests -v
-python -m nix
+uv sync                       # create the env, install the package + dev deps
+uv run pytest                 # run the test suite (pytest, with subtests)
+uv run python -m nix          # start the TUI
 ```
 
 ## Build a release
 
 ```bash
-pip install build
-python -m build
+uv build
 ```
 
 Produces `dist/cli_nix-<version>*.whl` and `.tar.gz` (the wheel embeds

@@ -31,6 +31,12 @@ dependencies = [
 [project.scripts]
 nix = "nix.cli:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "pytest-subtests>=0.15",
+]
+
 [tool.setuptools]
 include-package-data = true
 
