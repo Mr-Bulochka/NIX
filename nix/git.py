@@ -136,6 +136,20 @@ class Git:
             return self._run("push", "-u", "origin", branch)
         return self._run("push")
 
+    def snapshot(self) -> dict:
+        """Serialize the remote state so `remote info` can show a cache."""
+        urls = self.remote_urls()
+        platform = platform_for_url(urls[0][1]) if urls else "other"
+        branch = self.branch()
+        ab = self.ahead_behind()
+        return {
+            "urls": urls,
+            "platform": platform,
+            "branch": branch,
+            "ahead_behind": [ab[0], ab[1]] if ab is not None else None,
+            "unsent": self.unsent_commits(branch) if branch else [],
+        }
+
     # ---- write ---------------------------------------------------------
 
     def add_all(self) -> GitResult:

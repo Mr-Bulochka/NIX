@@ -89,6 +89,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.remote": "Remote",
         "tbl.platform": "Platform",
         "tbl.remote_ab": "Ahead/Behind",
+        "tbl.remote_cache": "Remote cache",
         "tbl.prs": "Open PRs",
         "modal.close": "Close (Esc)",
         "set.apply": "Apply",
@@ -303,6 +304,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "fb.remote_pr_opened": "PR opened: {title}",
         "fb.remote_no_prs": "no open PRs",
         "fb.remote_unknown_sub": "unknown remote subcommand: {sub}",
+        "fb.remote_cache_updated": "Last synced",
+        "fb.remote_cache_empty": "no cache yet — run remote fetch/pull/push --apply",
 
         # project identity rows
         "ident.name": "Name",
@@ -486,6 +489,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tbl.remote": "Remote",
         "tbl.platform": "Платформа",
         "tbl.remote_ab": "Впереди/Позади",
+        "tbl.remote_cache": "Кэш remote",
         "tbl.prs": "Открытые PR",
         "modal.close": "Закрыть (Esc)",
         "set.apply": "Применить",
@@ -700,6 +704,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "fb.remote_pr_opened": "PR открыт: {title}",
         "fb.remote_no_prs": "открытых PR нет",
         "fb.remote_unknown_sub": "неизвестная подкоманда remote: {sub}",
+        "fb.remote_cache_updated": "Синхронизировано",
+        "fb.remote_cache_empty": "кэша нет — выполни remote fetch/pull/push --apply",
 
         # project identity rows
         "ident.name": "Имя",

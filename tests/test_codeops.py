@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import tempfile
@@ -103,6 +104,21 @@ class _State:
     def __init__(self):
         tmp = Path(tempfile.mkdtemp())
         self.nix = tmp / ".nix"
+
+    def read_json(self, relative, default=None):
+        path = self.nix / relative
+        if not path.exists():
+            return default
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return default
+
+    def write_json(self, relative, value):
+        path = self.nix / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=2, ensure_ascii=False),
+                        encoding="utf-8")
 
 
 class _T:
@@ -256,6 +272,69 @@ class TestRemote(unittest.TestCase):
         _fire(self.p, "remote", ["push"])
         self.assertTrue(any(kind == "message" and "preview" in text
                             for kind, _, text in self.p.seen))
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_remote_push_apply_writes_cache(self):
+        self.p.root = _make_remote_repo()
+        _fire(self.p, "remote", ["push", "--apply"])
+        cache = self.p.state.read_json("origin/state.json")
+        self.assertIsNotNone(cache)
+        self.assertEqual(cache["platform"], "other")
+        self.assertEqual(cache["unsent"], [])
+        self.assertIn("updated", cache)
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_remote_dry_run_does_not_write_cache(self):
+        self.p.root = _make_remote_repo()
+        _fire(self.p, "remote", ["push"])
+        self.assertIsNone(self.p.state.read_json("origin/state.json"))
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_remote_info_reads_cache(self):
+        self.p.root = _make_remote_repo()
+        _fire(self.p, "remote", ["push", "--apply"])
+        self.p.seen.clear()
+        _fire(self.p, "remote", ["info"])
+        self.assertTrue(any(kind == "block" and title == "Remote cache"
+                            for kind, title, *_ in self.p.seen))
+
+    @unittest.skipUnless(shutil.which("git"), "git not available")
+    def test_snapshot_shape(self):
+        root = self.p.root
+        run = lambda *a: subprocess.run(a, cwd=str(root), check=True)
+        run("git", "init", "-q")
+        run("git", "config", "user.email", "t@t")
+        run("git", "config", "user.name", "t")
+        run("git", "checkout", "-q", "-b", "snapshot-test")
+        run("git", "remote", "add", "origin", "git@github.com:acme/x.git")
+        run("git", "commit", "--allow-empty", "-qm", "init")
+        from nix.git import Git
+        snap = Git(root).snapshot()
+        self.assertEqual(snap["platform"], "github")
+        self.assertEqual(snap["branch"], "snapshot-test")
+        self.assertIsNone(snap["ahead_behind"])
+        self.assertEqual(snap["urls"][0][1], "git@github.com:acme/x.git")
+
+    def test_snapshot_shape_no_repo(self):
+        from nix.git import Git
+        snap = Git(self.p.root).snapshot()
+        self.assertEqual(snap["platform"], "other")
+        self.assertEqual(snap["urls"], [])
+
+
+def _make_remote_repo():
+    base = Path(tempfile.mkdtemp())
+    remote = base / "origin.git"
+    repo = base / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    run = lambda *a: subprocess.run(a, cwd=str(repo), check=True)
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@t")
+    run("git", "config", "user.name", "t")
+    run("git", "remote", "add", "origin", str(remote))
+    run("git", "commit", "--allow-empty", "-qm", "init")
+    return repo
 
 
 class TestDiffSummary(unittest.TestCase):

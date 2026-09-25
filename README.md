@@ -327,7 +327,7 @@ repository — purely as a nice-to-have, never a requirement.
 - **Stage C** — Mutation Engine + Sandbox + World Laws (done)
 - **Stage D** — Checkpoint Manager + Experience System (done)
 - **Stage E** — Destructive Testing (done)
-- **Stage F** — GitHub/GitLab Bridge
+- **Stage F** — GitHub/GitLab Bridge (done)
 - **Stage G** — Tamagotchi Evolution
 - **Stage H** — Full TUI polish
 - **Stage I** — IDE daemon + protocol (done: `nix daemon`, see above; plugins per-editor remain)

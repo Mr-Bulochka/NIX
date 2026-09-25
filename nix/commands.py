@@ -1448,6 +1448,11 @@ def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
     urls = git.remote_urls()
     platform = platform_for_url(urls[0][1]) if urls else "other"
 
+    def save_snapshot() -> None:
+        snap = git.snapshot()
+        snap["updated"] = utc_now_iso()
+        app.state.write_json("origin/state.json", snap)
+
     if sub == "info":
         if not urls:
             app.ui.show_message("SYSTEM", app.t("fb.remote_none"))
@@ -1463,6 +1468,18 @@ def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
         if ab is not None:
             rows.append((app.t("tbl.remote_ab"),
                          f"ahead {ab[0]} · behind {ab[1]}", GREEN))
+        cache = app.state.read_json("origin/state.json", default=None)
+        if cache:
+            app.ui.show_block(app.t("tbl.remote_cache"), [
+                (app.t("ident.branch"), cache.get("branch", ""), CYAN),
+                (app.t("tbl.platform"), cache.get("platform", "other"), GREEN),
+                (app.t("ident.commits"),
+                 str(len(cache.get("unsent") or [])), PURPLE),
+                (app.t("fb.remote_cache_updated"),
+                 cache.get("updated", ""), DIM),
+            ])
+        else:
+            app.ui.show_message("SYSTEM", app.t("fb.remote_cache_empty"))
         app.ui.show_block(app.t("tbl.remote"), rows)
         return CommandResult()
 
@@ -1475,6 +1492,7 @@ def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
             app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
             return CommandResult()
         app.journal.write("GIT", "remote fetch")
+        save_snapshot()
         app.ui.show_message("SYSTEM", app.t("fb.remote_fetched"))
         return CommandResult()
 
@@ -1492,6 +1510,7 @@ def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
             app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
             return CommandResult()
         app.journal.write("GIT", "remote pull")
+        save_snapshot()
         app.ui.show_message("SYSTEM", app.t("fb.remote_pulled"))
         return CommandResult()
 
@@ -1513,6 +1532,7 @@ def cmd_remote(app: "NixApp", args: list[str]) -> CommandResult:
             app.ui.show_message("ERROR", res.stderr or app.t("fb.git_failed"))
             return CommandResult()
         app.journal.write("GIT", f"push {branch}")
+        save_snapshot()
         app.ui.show_message("SYSTEM", app.t("fb.remote_pushed", branch=branch))
         return CommandResult()
 
