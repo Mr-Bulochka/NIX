@@ -306,6 +306,59 @@ class TestCommands(unittest.TestCase):
         self.assertEqual(rows[0][1], "gen · x.py")
         self.assertEqual(rows[1][1], "wrap · app.py")
 
+    def test_add_pet_xp_level_up_updates_mood(self):
+        from nix.app import NixApp
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                app = NixApp()
+                app.ui = _StubUI()
+                app.pet = app.pet_store.create("Tester")
+                self.assertTrue(app.add_pet_xp(50))
+                self.assertEqual(app.pet["level"], 2)
+                self.assertEqual(app.pet["xp"], 0)
+                self.assertEqual(app.pet["mood"], "happy")
+                self.assertEqual(app.pet["energy"], 100)
+                self.assertEqual(app.pet["age"], 1)
+            finally:
+                os.chdir(old)
+
+    def test_add_pet_xp_below_threshold_keeps_mood(self):
+        from nix.app import NixApp
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                app = NixApp()
+                app.ui = _StubUI()
+                app.pet = app.pet_store.create("Tester")
+                self.assertTrue(app.add_pet_xp(30))
+                self.assertEqual(app.pet["level"], 1)
+                self.assertEqual(app.pet["xp"], 30)
+                self.assertEqual(app.pet["mood"], "curious")
+                self.assertEqual(app.pet["age"], 0)
+            finally:
+                os.chdir(old)
+
+    def test_cmd_scan_no_pet_is_safe(self):
+        from nix.app import NixApp
+        from nix.commands import cmd_scan
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            os.chdir(tmp)
+            try:
+                app = NixApp()
+                ui = _RecordingUI()
+                app.ui = ui
+                self.assertIsNone(app.pet)
+                result = cmd_scan(app, [])
+                self.assertIsNone(app.pet)
+                self.assertEqual(ui.errors, [])
+                self.assertTrue(result.continue_session)
+            finally:
+                os.chdir(old)
+
 
 if __name__ == "__main__":
     unittest.main()

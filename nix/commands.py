@@ -291,8 +291,11 @@ def cmd_scan(app: "NixApp", args: list[str]) -> CommandResult:
     app.journal.write("SCAN",
                        f"files={info.files} dirs={info.directories} "
                        f"functions={info.functions}")
-    app.pet = app.pet_store.update_mood(app.pet, "scan")
-    app.pet_store.save(app.pet)
+    if app.pet is not None:
+        app.pet = app.pet_store.update_mood(app.pet, "scan")
+        app.pet_store.save(app.pet)
+    else:
+        app.ui.show_message("SYSTEM", app.t("pet.no_pet"))
     return CommandResult()
 
 

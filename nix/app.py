@@ -125,6 +125,8 @@ class NixApp:
         new_skin = choose_skin(not_kind=pet.get("skin"))
         pet["skin"] = new_skin
         pet["last_pill_at"] = utc_now_ts()
+        pet["mood"] = "happy"
+        pet["energy"] = 100
         self.pet_store.save(pet)
         self.journal.write("PET", f"pill given: skin={new_skin}")
         try:
@@ -146,6 +148,10 @@ class NixApp:
             try:
                 if getattr(self, "ui", None):
                     self.ui.show_message("SYSTEM", self.t("fb.level_up", level=after))
+            except Exception:
+                pass
+            try:
+                self.pet = self.pet_store.update_mood(pet, "level_up")
             except Exception:
                 pass
         if save:
@@ -204,6 +210,11 @@ class NixApp:
             self.ui.show_message("ERROR", self.t("fb.failed", name=name, exc=exc))
             self.session_logger.write("ERROR", f"/{name} failed: {exc}")
             self.add_pet_xp(2, "failure", save=True)
+            if self.pet is not None:
+                try:
+                    self.pet = self.pet_store.update_mood(self.pet, "failure")
+                except Exception:
+                    pass
             return True
 
         if result.message:

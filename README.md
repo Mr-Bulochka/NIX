@@ -328,6 +328,11 @@ repository — purely as a nice-to-have, never a requirement.
 - **Stage D** — Checkpoint Manager + Experience System (done)
 - **Stage E** — Destructive Testing (done)
 - **Stage F** — GitHub/GitLab Bridge (done)
-- **Stage G** — Tamagotchi Evolution
-- **Stage H** — Full TUI polish
+- **Stage G** — Tamagotchi Evolution (done): 8 skins, XP-driven level-up mood,
+  rewarding pill (cooldown + skin change), mood/energy drain on failed commands,
+  None-pet crash guards
+- **Stage H** — Full TUI polish (done): celebration flash + pill state badge
+  (cooldown/ready), keyboard-first settings (Esc closes, Enter applies),
+  command history navigation (Up/Down), global hotkeys (Ctrl+1/3/4/6),
+  ringing status banner, error/warning color coding
 - **Stage I** — IDE daemon + protocol (done: `nix daemon`, see above; plugins per-editor remain)

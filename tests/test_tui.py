@@ -241,6 +241,152 @@ class TestTUI(unittest.TestCase):
                 assert self.app.config.mode != "git"
         self._run(scenario())
 
+    def test_settings_pill_triggers_celebration(self):
+        from textual.widgets import Button
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                pill = pilot.app.screen.query_one("#set-pill", Button)
+                assert not pill.disabled
+                before = str(pill.label)
+                await pilot.click("#set-pill")
+                await pilot.pause(0.1)
+                assert self.app.ui._celebrating
+                assert str(pill.label) != before
+        self._run(scenario())
+
+    def test_clip_length_and_whitespace(self):
+        from nix.ui import _clip
+
+        assert _clip("hi") == "hi"
+        assert _clip("  a   b  ") == "a b"
+        assert _clip("x" * 400) == "x" * 400
+        assert _clip("y" * 401) == "y" * 399 + "\u2026"
+        assert _clip("z" * 398 + "  w") == "z" * 398 + " w"
+
+    def test_settings_escape_keyboard_closes(self):
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                mode = pilot.app.screen.query_one("#set-mode")
+                mode.value = "git"
+                await pilot.pause(0.3)
+                await pilot.press("escape")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                assert self.app.config.mode != "git"
+        self._run(scenario())
+
+    def test_settings_enter_keyboard_applies(self):
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                mode = pilot.app.screen.query_one("#set-mode")
+                mode.value = "safe"
+                await pilot.pause(0.3)
+                pilot.app.screen.set_focus(None)
+                await pilot.press("enter")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                assert self.app.config.mode == "safe"
+        self._run(scenario())
+
+    def test_cmd_history_navigation(self):
+        from textual.widgets import Input
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.query_one("#cmd", Input)
+                cmd.value = "attempts +5"
+                cmd.focus()
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd.value = "attempts +10"
+                cmd.focus()
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd.focus()
+                await pilot.press("up")
+                assert cmd.value == "attempts +10"
+                await pilot.press("up")
+                assert cmd.value == "attempts +5"
+                await pilot.press("down")
+                assert cmd.value == "attempts +10"
+                await pilot.press("down")
+                assert cmd.value == ""
+                await pilot.press("down")
+                assert cmd.value == ""
+        self._run(scenario())
+
+    def test_hotkeys_run_commands(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.query_one("#cmd", Input)
+                await pilot.press("ctrl+1")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                assert cmd.has_focus
+                await pilot.press("ctrl+3")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                assert cmd.has_focus
+                await pilot.press("ctrl+6")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+                assert cmd.has_focus
+                await pilot.press("ctrl+4")
+                await pilot.pause(0.5)
+                assert isinstance(pilot.app.screen, SettingsModal)
+                await pilot.press("escape")
+                await pilot.pause(0.5)
+                assert not isinstance(pilot.app.screen, SettingsModal)
+        self._run(scenario())
+
 
 if __name__ == "__main__":
     unittest.main()

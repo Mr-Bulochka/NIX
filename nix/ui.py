@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import fields
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -9,6 +10,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.content import Content
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button, Footer, Header, Input, Label, RichLog, Select, Static, Switch,
@@ -43,6 +45,13 @@ PURPLE = "#a78bd6"
 PINK = "#ee8fa8"
 
 SPINNER = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
+
+
+def _clip(text: str, limit: int = 400) -> str:
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "\u2026"
 
 
 MOOD_STYLES = {
@@ -645,7 +654,22 @@ class SettingsModal(ModalScreen[None]):
         self.query_one("#set-close", Button).label = self._t("modal.close")
         self.query_one("#set-apply", Button).label = self._t("set.apply")
         self._update_pill()
+        self.set_interval(1.0, self._tick_pill)
         self._input_ready = True
+
+    def _tick_pill(self) -> None:
+        try:
+            self._update_pill()
+        except Exception:
+            pass
+
+    def on_key(self, event) -> None:
+        if event.key != "enter":
+            return
+        focused = self.focused
+        if isinstance(focused, (Input, Button)):
+            return
+        self.action_apply_settings()
 
     def _update_pill(self) -> None:
         t = self._t
@@ -722,6 +746,8 @@ class SettingsModal(ModalScreen[None]):
         if wid != "set-pill":
             return
         ok, message = self._ui.nix.give_pill()
+        if ok:
+            self._ui._celebrate()
         self._ui._refresh_pet()
         self.notify(message, severity="information" if ok else "warning",
                     timeout=4)
@@ -750,6 +776,27 @@ class SettingsModal(ModalScreen[None]):
         self._input_ready = False
 
 
+class NixHeader(Header):
+    MODE_COLORS = {"safe": GREEN, "git": BLUE}
+
+    def __init__(self, ui: "NixUI", show_clock: bool = True) -> None:
+        super().__init__(show_clock=show_clock)
+        self._ui = ui
+
+    def format_title(self) -> Content:
+        ui = self._ui
+        name = _clip(ui.nix.root.name or str(ui.nix.root), 40)
+        cfg = ui.nix.config
+        mode = cfg.t(f"cmd.mode.{cfg.mode}")
+        color = self.MODE_COLORS.get(cfg.mode, CYAN)
+        return Content.assemble(
+            Text(f" {name} ", style=f"bold {PURPLE}"),
+            Text("\u00b7", style=DIM),
+            Text(f" {mode.upper()} ", style=f"bold {color}"),
+            Text(f"\u00b7 v{ui.nix.version}", style=DIM),
+        )
+
+
 class NixUI(App):
     ENABLE_COMMAND_PALETTE = False
 
@@ -758,6 +805,11 @@ class NixUI(App):
         Binding("ctrl+l", "clear_log", "Clear", priority=True),
         Binding("ctrl+s", "run_scan", "Scan", priority=True),
         Binding("ctrl+p", "run_pet", "Pet", priority=True),
+        Binding("ctrl+1", "run_pet", "Pet", priority=True, show=False),
+        Binding("ctrl+3", "run_status", "Status", priority=True, show=False),
+        Binding("ctrl+4", "run_settings", "Settings", priority=True,
+                show=False),
+        Binding("ctrl+6", "run_help", "Help", priority=True, show=False),
         Binding("pageup", "page_up", "Page up", priority=True, show=False),
         Binding("pagedown", "page_down", "Page down", priority=True,
                 show=False),
@@ -770,6 +822,9 @@ class NixUI(App):
         self.nix = nix
         self._spin = 0
         self._blink = 0
+        self._cmd_history: list[str] = []
+        self._cmd_hist_idx: int | None = None
+        self._celebrate_until = 0.0
 
     def on_resize(self, event) -> None:
         w, h = event.size.width, event.size.height
@@ -785,7 +840,7 @@ class NixUI(App):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="app"):
-            yield Header(show_clock=True)
+            yield NixHeader(self, show_clock=True)
             with Horizontal(id="top"):
                 with Vertical(id="pet-wrap"):
                     yield Static("", id="pet-box")
@@ -826,12 +881,47 @@ class NixUI(App):
         raw = event.value.strip()
         if not raw:
             return
+        if not self._cmd_history or self._cmd_history[-1] != raw:
+            self._cmd_history.append(raw)
+        self._cmd_hist_idx = None
         cmd_input = self.query_one("#cmd", Input)
         cmd_input.value = ""
         if not self.nix.handle_command(raw):
             self.exit(0)
         self._refresh_header()
         self._focus_cmd()
+
+    def on_key(self, event) -> None:
+        if getattr(self.focused, "id", None) != "cmd":
+            return
+        cmd = self.query_one("#cmd", Input)
+        if event.key == "escape":
+            self._cmd_hist_idx = None
+            cmd.value = ""
+            cmd.cursor_position = 0
+            event.stop()
+            return
+        if event.key == "up":
+            if self._cmd_history:
+                if self._cmd_hist_idx is None:
+                    self._cmd_hist_idx = len(self._cmd_history) - 1
+                else:
+                    self._cmd_hist_idx = max(0, self._cmd_hist_idx - 1)
+                cmd.value = self._cmd_history[self._cmd_hist_idx]
+                cmd.cursor_position = len(cmd.value)
+            event.stop()
+            return
+        if event.key == "down":
+            if self._cmd_hist_idx is not None:
+                self._cmd_hist_idx += 1
+                if self._cmd_hist_idx < len(self._cmd_history):
+                    cmd.value = self._cmd_history[self._cmd_hist_idx]
+                else:
+                    self._cmd_hist_idx = None
+                    cmd.value = ""
+                cmd.cursor_position = len(cmd.value)
+            event.stop()
+            return
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         mapping = {
@@ -868,6 +958,19 @@ class NixUI(App):
         self.nix.handle_command("pet")
         self._focus_cmd()
 
+    def action_run_status(self) -> None:
+        self.nix.handle_command("status")
+        self._refresh_header()
+        self._focus_cmd()
+
+    def action_run_settings(self) -> None:
+        self.nix.handle_command("settings")
+        self._focus_cmd()
+
+    def action_run_help(self) -> None:
+        self.nix.handle_command("help")
+        self._focus_cmd()
+
     # ----- internal --------------------------------------------------
 
     def _log(self) -> RichLog:
@@ -884,11 +987,11 @@ class NixUI(App):
 
     def _apply_language(self) -> None:
         cfg = self.nix.config
-        self.query_one("#btn-scan", Button).label = self._t("btn.scan")
-        self.query_one("#btn-status", Button).label = self._t("btn.status")
-        self.query_one("#btn-pet", Button).label = self._t("btn.pet")
-        self.query_one("#btn-settings", Button).label = self._t("btn.settings")
-        self.query_one("#btn-quit", Button).label = self._t("btn.quit")
+        self.query_one("#btn-scan", Button).label = f"2 {self._t('btn.scan')}"
+        self.query_one("#btn-status", Button).label = f"3 {self._t('btn.status')}"
+        self.query_one("#btn-pet", Button).label = f"1 {self._t('btn.pet')}"
+        self.query_one("#btn-settings", Button).label = f"4 {self._t('btn.settings')}"
+        self.query_one("#btn-quit", Button).label = f"7 {self._t('btn.quit')}"
         self.query_one("#cmd", Input).placeholder = self._t("cmd.placeholder")
         self._refresh_header()
 
@@ -934,9 +1037,17 @@ class NixUI(App):
         self._refresh_pet()
         self.query_one("#cmd", Input).focus()
 
+    def _celebrate(self) -> None:
+        self._celebrate_until = time.monotonic() + 2.0
+        self._refresh_pet(animate=True)
+
+    @property
+    def _celebrating(self) -> bool:
+        return time.monotonic() < self._celebrate_until
+
     def _tick(self) -> None:
         self._spin = (self._spin + 1) % len(SPINNER)
-        if self.nix.config.animations_enabled:
+        if self.nix.config.animations_enabled or self._celebrating:
             self._blink = (self._blink + 1) % 4
             self._refresh_pet(animate=True)
 
@@ -966,7 +1077,10 @@ class NixUI(App):
         age = int(pet.get("age", 0))
 
         decorated = Text()
-        decorated.append("  \u2726  ", style=DIM)
+        if self._celebrating:
+            decorated.append(SPINNER[self._spin], style=YELLOW)
+        else:
+            decorated.append("  \u2726  ", style=DIM)
         decorated.append(name, style=f"bold {BLUE}")
         decorated.append("  \u2726  ", style=DIM)
         name_label.update(decorated)
@@ -1028,7 +1142,7 @@ class NixUI(App):
             Text()
             .append(f"{_timestamp()} ", style=DIM)
             .append(f"{kind.upper():>10} ", style=color)
-            .append(text, style=FG)
+            .append(_clip(text), style=FG)
         )
 
     def show_help(self, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
@@ -1042,7 +1156,7 @@ class NixUI(App):
                 log.write(
                     Text()
                     .append("      " + usage.ljust(22), style=GREEN)
-                    .append(desc, style=FG)
+                    .append(_clip(desc), style=FG)
                 )
 
     def show_block(self, title: str,
@@ -1052,7 +1166,7 @@ class NixUI(App):
             self._log().write(
                 Text()
                 .append("    " + str(label).ljust(24), style=CYAN)
-                .append(str(value), style=color)
+                .append(_clip(str(value)), style=color)
             )
 
     def _log_write_header(self, log, title: str) -> None:
@@ -1119,8 +1233,11 @@ class NixUI(App):
                     .append(str(count), style=GREEN)
                 )
 
-    def show_pet(self, pet: dict) -> None:
+    def show_pet(self, pet: dict | None) -> None:
         t = self._t
+        if pet is None:
+            self._log().write(Text(self._t("pet.no_pet"), style=DIM))
+            return
         mood = pet.get("mood", "curious")
         mood_label = t(f"mood.{mood}")
         mood_style = MOOD_STYLES.get(mood, FG)
