@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ringing banner highlights.
   - Color coding across log/status elements.
 - 6 new tests covering the Stage H polish behavior.
+- Completed Stage H.
 
 ## [0.3.6] - 2026-09-25
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remote info.
 - Adopted `uv` lockfile with a dev dependency group; README updated to the
   `uv` workflow.
+- Completed Stage G.
 
 ## [0.3.5] - 2026-09-24
 
