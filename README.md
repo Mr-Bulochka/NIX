@@ -212,28 +212,77 @@ generation work in a given language. Bundled modules live in
 ### IDE daemon & protocol (Stage I)
 
 NIX runs headless without the TUI, so any IDE/editor can drive the same
-deterministic toolkit:
+deterministic toolkit. Every request is one line; every response is one JSON
+object per line (JSON Lines).
 
 ```
 nix daemon                     # line protocol over stdin/stdout (JSON Lines)
 nix daemon --socket 127.0.0.1:7411
-nix daemon --once "status"     # one command, one JSON response
+nix daemon --once "status"     # one command, one JSON response + exit code
 ```
 
-Each request is one line; each response is one JSON object:
+#### Transport
+
+- **stdin** (default): read one line per request, write one envelope per
+  response, forever. A response with `session_end: true` ends the session.
+- **`--socket host:port`**: TCP server (`127.0.0.1:7411`). Each connection is
+  one request/response session; `session_end: true` closes it.
+- **`--once "text"`**: run exactly one request, print one envelope, exit.
+
+`--once` and `--socket` are mutually exclusive; extra positional arguments
+after either flag are a usage error. All protocol input and output is UTF-8;
+diagnostics (e.g. the listening banner) go to stderr so stdout stays
+parseable JSON Lines.
+
+#### Envelope
+
+```
+{"ok": bool, "session_end": bool, "events": [...]}
+```
+
+- `ok` — `false` when the request could not be completed; then `error`
+  carries a human-readable reason.
+- `session_end` — `true` only after `quit`/`exit` or a command chain that
+  ends the session. The client must then stop sending requests.
+- `events` — ordered command output, re-renderable verbatim:
+  `message`, `block`, `code`, `tree`, `pet`, `status`, `scan`, `logs`,
+  `history`, `help`. Empty for `HELP`.
+- `commands` (only on `HELP`) — the full command table as
+  `[{"name", "description", "usage"}, ...]`.
+
+Examples:
 
 ```
 > HELP
 {"ok": true, "session_end": false, "commands": [{"name": "defs", ...}]}
 > defs
 {"ok": true, "session_end": false, "events": [{"op": "block", "title": "Symbols", ...}]}
-> quit
-{"ok": true, "session_end": true}
+> status; quit
+{"ok": true, "session_end": true, "events": [{"op": "status", ...}]}
+> definitely_not_a_command
+{"ok": false, "session_end": false, "events": [], "error": "unknown command: definitely_not_a_command"}
 ```
 
-Commands are the exact `COMMANDS` the TUI uses; events are ordered
-(`message`, `block`, `code`, `tree`, `pet`, `status`, `scan`, `logs`,
-`history`, `help`) and re-renderable by the client verbatim.
+`PING` answers `{"ok": true, "session_end": false, "events": []}` and is the
+liveness check.
+
+#### Request parsing
+
+One request line may hold several commands separated by `;`. Every token is
+parsed with the same tokenizer the TUI uses (quotes and escapes included);
+the first token of each command is its name, the rest are its arguments and
+are passed to the very handlers `COMMANDS` registers. A command that fails
+mid-way still delivers the events it already emitted, but the envelope is
+`ok: false` with `error`. A request that makes no sense at the protocol level
+(unknown command, malformed line) is never answered with a fake `ok: true`.
+
+#### Exit codes
+
+| Mode | Code | Meaning |
+|------|------|---------|
+| `--once` | 0 | `ok: true` |
+| `--once` | 1 | `ok: false` (command failure) |
+| any | 2 | usage/parse error (no envelope, message on stderr) |
 
 Module layout:
 

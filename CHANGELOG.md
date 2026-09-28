@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-09-28
+
+### Added
+- v1 IDE daemon protocol (`nix daemon`): strict UTF-8 decoding, request envelope
+  with an explicit `error` field instead of a fake-success ERROR event, and
+  TUI-compatible tokenized parsing with multi-command chunk dispatch.
+- `--help` / `-h` support; usage errors exit with code 2 (`--once` and `--socket`
+  are mutually exclusive; each now requires exactly one argument).
+- `--once` exits with code 1 when the command fails; the socket server keeps
+  accepting new connections after a `session_end` response.
+- Rewrote the daemon test suite: 30 tests across in-process and subprocess modes
+  (`--once`, `--help`, stdin, socket).
+
+### Fixed
+- Non-UTF-8 input on stdin/socket is answered with `ok: false` and
+  `error: invalid UTF-8` instead of a silently mangled success envelope.
+- The stdin loop now stops after a `session_end: true` response.
+
 ## [0.3.7] - 2026-09-27
 
 ### Added
