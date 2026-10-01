@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nix.app import NixApp
 from nix.ui import NixUI
+import nix.ui
 
 
 class TestTUI(unittest.TestCase):
@@ -321,6 +322,440 @@ class TestTUI(unittest.TestCase):
                 assert self.app.config.mode == "safe"
         self._run(scenario())
 
+    def test_suggest_lists_prefix_matches(self):
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                assert not box.has_class("visible")
+
+                cmd.value = "che"
+                await pilot.pause()
+                names = [item[0] for item in ui._suggest_items]
+                assert names == sorted(names, key=lambda n: (len(n), n))
+                assert all(n.startswith("che") for n in names)
+                assert box.has_class("visible")
+        self._run(scenario())
+
+    def test_suggest_tab_completes_without_sending(self):
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                await pilot.press("d", "e")
+                await pilot.pause()
+                assert box.has_class("visible")
+                assert ui._suggest_items[0][0] == "deps"
+                before = len(ui._log().lines)
+
+                await pilot.press("tab")
+                await pilot.pause()
+                assert cmd.value == "deps"
+                assert cmd.cursor_position == len("deps")
+                assert not box.has_class("visible")
+                assert pilot.app.focused is cmd
+                assert len(ui._log().lines) == before
+                assert ui._cmd_history == []
+        self._run(scenario())
+
+    def test_suggest_arrows_own_history_when_visible(self):
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                await pilot.press("d")
+                await pilot.pause()
+                assert [item[0] for item in ui._suggest_items] == [
+                    "deps", "destruct", "defs"]
+
+                await pilot.press("down")
+                await pilot.pause()
+                assert ui._suggest_idx == 1
+                assert cmd.value == "d"
+                await pilot.press("up")
+                await pilot.pause()
+                assert ui._suggest_idx == 0
+                await pilot.press("up")
+                await pilot.pause()
+                assert ui._suggest_idx == 0
+                assert cmd.value == "d"
+                assert ui._cmd_hist_idx is None
+        self._run(scenario())
+
+    def test_suggest_escape_hides_then_clears(self):
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                await pilot.press("c", "h")
+                await pilot.pause()
+                assert box.has_class("visible")
+
+                await pilot.press("escape")
+                await pilot.pause()
+                assert not box.has_class("visible")
+                assert cmd.value == "ch"
+
+                await pilot.press("escape")
+                await pilot.pause()
+                assert cmd.value == ""
+        self._run(scenario())
+
+    def test_suggest_hidden_when_disabled_or_too_short(self):
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+
+                self.app.config.autocomplete_min_chars = 3
+                cmd.value = "ch"
+                await pilot.pause()
+                assert not box.has_class("visible")
+
+                self.app.config.autocomplete_min_chars = 1
+                cmd.value = "zzz"
+                await pilot.pause()
+                assert not box.has_class("visible")
+
+                cmd.value = "che"
+                await pilot.pause()
+                assert box.has_class("visible")
+
+                self.app.config.autocomplete_enabled = False
+                cmd.value = "chec"
+                await pilot.pause()
+                assert not box.has_class("visible")
+        self._run(scenario())
+
+    def test_suggest_respects_max_items(self):
+        from textual.widgets import Input
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            self.app.config.autocomplete_max_items = 3
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.value = ""
+                await pilot.pause()
+                assert len(ui._suggest_matches("")) == 0
+                matches = ui._suggest_matches("d")
+                assert len(matches) == 3
+                assert all(name.startswith("d") for name, _, _ in matches)
+        self._run(scenario())
+
+    def test_suggest_is_prefix_only(self):
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                names = [n for n, _, _ in ui._suggest_matches("d")]
+                assert names == ["deps", "destruct", "defs"]
+                # Substring matches are deliberately excluded: on "c" a
+                # substring filter would surface echo/which/scan, which
+                # do not start with "c" and are noise in a command list.
+                assert "echo" not in [n for n, _, _ in ui._suggest_matches("c")]
+                assert [n for n, _, _ in ui._suggest_matches("zzzz")] == []
+        self._run(scenario())
+
+    def test_suggest_prefix_match_respects_case_setting(self):
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.config.autocomplete_case_insensitive = True
+                assert [n for n, _, _ in ui._suggest_matches("DE")] == [
+                    n for n, _, _ in ui._suggest_matches("de")]
+                self.app.config.autocomplete_case_insensitive = False
+                assert [n for n, _, _ in ui._suggest_matches("DE")] == []
+        self._run(scenario())
+
+    def test_suggest_mouse_click_selects_then_tab_applies(self):
+        from textual.geometry import Offset
+        from textual.widgets import Input, Label
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                box = pilot.app.screen.query_one("#suggest", Label)
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                cmd.value = "d"
+                await pilot.pause()
+                assert len(ui._suggest_items) >= 2
+                expected = ui._suggest_items[1][0]
+
+                before = cmd.value
+                await pilot.click("#suggest", offset=Offset(3, 2))
+                await pilot.pause()
+                assert ui._suggest_idx == 1
+                assert cmd.value == before
+                assert pilot.app.focused is cmd
+                assert box.has_class("visible")
+
+                await pilot.press("tab")
+                await pilot.pause()
+                assert cmd.value == expected
+                assert not box.has_class("visible")
+        self._run(scenario())
+
+    def test_suggest_mouse_click_on_border_is_ignored(self):
+        from textual.geometry import Offset
+        from textual.widgets import Input
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                cmd.value = "d"
+                await pilot.pause()
+                await pilot.click("#suggest", offset=Offset(3, 2))
+                await pilot.pause()
+                assert ui._suggest_idx == 1
+                # Top border maps to row -1 and must not change selection.
+                await pilot.click("#suggest", offset=Offset(3, 0))
+                await pilot.pause()
+                assert ui._suggest_idx == 1
+        self._run(scenario())
+
+    def test_suggest_mouse_click_past_last_item_is_ignored(self):
+        from textual.geometry import Offset
+        from textual.widgets import Input
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.screen.query_one("#cmd", Input)
+                cmd.focus()
+                cmd.value = "d"
+                await pilot.pause()
+                count = len(ui._suggest_items)
+                assert count >= 1
+                await pilot.click(
+                    "#suggest", offset=Offset(3, count + 1))
+                await pilot.pause()
+                assert ui._suggest_idx == 0
+        self._run(scenario())
+
+    def test_settings_renders_autocomplete_controls(self):
+        from textual.widgets import Input, Switch
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                screen = pilot.app.screen
+                assert isinstance(screen, SettingsModal)
+                assert screen.query_one("#set-ac-enabled", Switch).value
+                assert screen.query_one(
+                    "#set-ac-case-insensitive", Switch).value
+                assert screen.query_one(
+                    "#set-ac-descriptions", Switch).value
+                assert screen.query_one("#set-ac-min-chars", Input).value == "1"
+                assert screen.query_one("#set-ac-max-items", Input).value == "8"
+        self._run(scenario())
+
+    def test_settings_applies_autocomplete_switches(self):
+        from textual.widgets import Switch
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                screen = pilot.app.screen
+                assert isinstance(screen, SettingsModal)
+                screen.query_one("#set-ac-enabled", Switch).value = False
+                screen.query_one(
+                    "#set-ac-case-insensitive", Switch).value = False
+                screen.query_one(
+                    "#set-ac-descriptions", Switch).value = False
+                await pilot.pause(0.3)
+                await pilot.click("#set-apply")
+                await pilot.pause(0.5)
+                assert self.app.config.autocomplete_enabled is False
+                assert self.app.config.autocomplete_case_insensitive is False
+                assert self.app.config.autocomplete_show_descriptions is False
+        self._run(scenario())
+
+    def test_settings_autocomplete_int_inputs_clamped(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                screen = pilot.app.screen
+                assert isinstance(screen, SettingsModal)
+
+                max_items = screen.query_one("#set-ac-max-items", Input)
+                max_items.value = "999"
+                await max_items.action_submit()
+                await pilot.pause(0.2)
+                assert screen._draft.autocomplete_max_items == 50
+
+                max_items.value = "0"
+                await max_items.action_submit()
+                await pilot.pause(0.2)
+                assert screen._draft.autocomplete_max_items == 1
+
+                min_chars = screen.query_one("#set-ac-min-chars", Input)
+                min_chars.value = "-5"
+                await min_chars.action_submit()
+                await pilot.pause(0.2)
+                assert screen._draft.autocomplete_min_chars == 0
+
+                min_chars.value = "3"
+                await min_chars.action_submit()
+                await pilot.pause(0.2)
+                await pilot.click("#set-apply")
+                await pilot.pause(0.5)
+                assert self.app.config.autocomplete_min_chars == 3
+                assert self.app.config.autocomplete_max_items == 1
+        self._run(scenario())
+
+    def test_settings_autocomplete_rejects_non_integer(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                screen = pilot.app.screen
+                assert isinstance(screen, SettingsModal)
+                field = screen.query_one("#set-ac-max-items", Input)
+                field.value = "abc"
+                await field.action_submit()
+                await pilot.pause(0.2)
+                assert screen._draft.autocomplete_max_items == 8
+        self._run(scenario())
+
+    def test_settings_disabled_autocomplete_hides_suggestions(self):
+        from textual.widgets import Input, Switch
+        from nix.ui import SettingsModal
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 60)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                self.app.handle_command("settings")
+                await pilot.pause(0.5)
+                screen = pilot.app.screen
+                assert isinstance(screen, SettingsModal)
+                screen.query_one("#set-ac-enabled", Switch).value = False
+                await pilot.pause(0.3)
+                await pilot.click("#set-apply")
+                await pilot.pause(0.5)
+                cmd = pilot.app.query_one("#cmd", Input)
+                cmd.value = "d"
+                await pilot.pause(0.2)
+                assert ui._suggest_matches("d") == []
+                assert not pilot.app.query_one(
+                    "#suggest").has_class("visible")
+        self._run(scenario())
+
     def test_cmd_history_navigation(self):
         from textual.widgets import Input
 
@@ -343,14 +778,19 @@ class TestTUI(unittest.TestCase):
                 await pilot.pause()
                 cmd.focus()
                 await pilot.press("up")
+                await pilot.pause()
                 assert cmd.value == "attempts +10"
                 await pilot.press("up")
+                await pilot.pause()
                 assert cmd.value == "attempts +5"
                 await pilot.press("down")
+                await pilot.pause()
                 assert cmd.value == "attempts +10"
                 await pilot.press("down")
+                await pilot.pause()
                 assert cmd.value == ""
                 await pilot.press("down")
+                await pilot.pause()
                 assert cmd.value == ""
         self._run(scenario())
 
@@ -386,6 +826,296 @@ class TestTUI(unittest.TestCase):
                 await pilot.pause(0.5)
                 assert not isinstance(pilot.app.screen, SettingsModal)
         self._run(scenario())
+
+    def _pet_scenario(self, size=(160, 40)):
+        async def scenario(body):
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=size) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                await body(pilot, ui)
+        return scenario
+
+    def test_tamagotchi_toggle_hides_and_shows_panels(self):
+        async def body(pilot, ui):
+            wrap = pilot.app.query_one("#pet-wrap")
+            stats = pilot.app.query_one("#pet-stats")
+            assert wrap.display and stats.display
+
+            self.app.config.tamagotchi_enabled = False
+            ui._apply_pet_visibility()
+            await pilot.pause()
+            assert not wrap.display and not stats.display
+
+            self.app.config.tamagotchi_enabled = True
+            ui._apply_pet_visibility()
+            await pilot.pause()
+            assert wrap.display and stats.display
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_apply_toggles_pet_visibility(self):
+        from textual.widgets import Switch
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.config.tamagotchi_enabled = True
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            screen.query_one("#set-tamagotchi", Switch).value = False
+            await pilot.pause(0.2)
+            screen.query_one("#set-apply").press()
+            await pilot.pause(0.5)
+            assert not pilot.app.query_one("#pet-wrap").display
+            assert not pilot.app.query_one("#pet-stats").display
+        self._run(self._pet_scenario()(body))
+
+    def test_avatar_toggle_shows_placeholder(self):
+        from textual.widgets import Static
+
+        async def body(pilot, ui):
+            self.app.config.avatar_enabled = False
+            ui._refresh_pet()
+            await pilot.pause()
+            box = pilot.app.query_one("#pet-box", Static)
+            assert ui._t("pet.avatar_off") in str(box.render())
+
+            self.app.config.avatar_enabled = True
+            ui._refresh_pet()
+            await pilot.pause()
+            assert ui._t("pet.avatar_off") not in box.render().plain
+        self._run(self._pet_scenario()(body))
+
+    def test_auto_scan_runs_once_at_startup(self):
+        calls = []
+
+        async def body(pilot, ui):
+            assert calls == [Path(self.root)]
+            ui._auto_scan_if_enabled()
+            assert calls == [Path(self.root)]
+        original = nix.ui.scan_project
+        nix.ui.scan_project = lambda root: calls.append(Path(root)) or _empty_info()
+        try:
+            self._run(self._pet_scenario()(body))
+        finally:
+            nix.ui.scan_project = original
+
+    def test_auto_scan_skipped_when_disabled(self):
+        calls = []
+
+        async def body(pilot, ui):
+            assert calls == []
+        original = nix.ui.scan_project
+        self.app.config.auto_scan = False
+        nix.ui.scan_project = lambda root: calls.append(Path(root)) or _empty_info()
+        try:
+            self._run(self._pet_scenario()(body))
+        finally:
+            nix.ui.scan_project = original
+
+    def test_registry_covers_every_setting_and_derived_maps(self):
+        from nix.ui import (AC_SPEC_IDS, FLOAT_KEYS, INT_KEYS, PATHS_KEYS,
+                            SETTING_SPECS, TOGGLE_KEYS)
+
+        keys = [spec.key for spec in SETTING_SPECS]
+        assert len(keys) == len(set(keys)), "duplicate config key in registry"
+        ids = [spec.widget_id for spec in SETTING_SPECS]
+        assert len(ids) == len(set(ids)), "duplicate widget id in registry"
+
+        stable = {
+            "set-tamagotchi", "set-animations", "set-avatar", "set-sounds",
+            "set-auto-scan", "set-checkpoint", "set-git", "set-ac-enabled",
+            "set-ac-case-insensitive", "set-ac-descriptions",
+            "set-ac-min-chars", "set-ac-max-items", "set-clock",
+            "set-log-max-lines", "set-animation-interval",
+            "set-history-size", "set-pill-cooldown", "set-timeout",
+            "set-protected-paths",
+        }
+        assert stable == set(ids)
+
+        for wid in AC_SPEC_IDS:
+            assert wid in TOGGLE_KEYS or wid in INT_KEYS
+        for spec in SETTING_SPECS:
+            if spec.kind == "switch":
+                assert TOGGLE_KEYS[spec.widget_id] == spec.key
+            elif spec.kind == "int":
+                assert INT_KEYS[spec.widget_id][0] == spec.key
+            elif spec.kind == "float":
+                assert FLOAT_KEYS[spec.widget_id][0] == spec.key
+            elif spec.kind == "paths":
+                assert PATHS_KEYS[spec.widget_id] == spec.key
+
+    def test_settings_renders_every_registry_control(self):
+        from textual.widgets import Input, Switch
+        from nix.ui import SETTING_SPECS, SettingsModal
+
+        async def body(pilot, ui):
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            for spec in SETTING_SPECS:
+                cls = Switch if spec.kind == "switch" else Input
+                assert screen.query_one(f"#{spec.widget_id}", cls) is not None
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_applies_clock_and_log_limits_live(self):
+        from textual.widgets import RichLog, Switch
+        from nix.ui import NixHeader, SettingsModal
+
+        async def body(pilot, ui):
+            header = pilot.app.query_one(NixHeader)
+            assert header.query_one("#hdr-clock").display is True
+            assert header.query_one("#hdr-noclock").display is False
+            assert pilot.app.query_one("#log", RichLog).max_lines == 500
+
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            screen.query_one("#set-clock", Switch).value = False
+            screen.query_one("#set-log-max-lines").value = "123"
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+
+            assert self.app.config.show_clock is False
+            assert self.app.config.log_max_lines == 123
+            assert header.query_one("#hdr-clock").display is False
+            assert header.query_one("#hdr-noclock").display is True
+            assert pilot.app.query_one("#log", RichLog).max_lines == 123
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_applies_unssubmitted_typed_values(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            # Typed but never submitted: Apply must still pick this up.
+            screen.query_one("#set-animation-interval", Input).value = "0.25"
+            screen.query_one("#set-history-size", Input).value = "7"
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+            assert self.app.config.animation_interval == 0.25
+            assert self.app.config.command_history_size == 7
+            assert ui._anim_timer is not None
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_clamps_numeric_ranges_on_apply(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            screen.query_one("#set-log-max-lines", Input).value = "99999"
+            screen.query_one("#set-animation-interval", Input).value = "0.0"
+            screen.query_one("#set-history-size", Input).value = "-4"
+            screen.query_one("#set-pill-cooldown", Input).value = "5000"
+            screen.query_one("#set-timeout", Input).value = "1"
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+            assert self.app.config.log_max_lines == 5000
+            assert self.app.config.animation_interval == 0.1
+            assert self.app.config.command_history_size == 0
+            assert self.app.config.pill_cooldown_minutes == 1440
+            assert self.app.config.default_command_timeout == 5
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_rejects_non_numeric_on_apply_and_stays_open(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            screen.query_one("#set-animation-interval", Input).value = "fast"
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+            assert isinstance(pilot.app.screen, SettingsModal)
+            assert self.app.config.animation_interval == 1.0
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_normalizes_protected_paths_on_apply(self):
+        from textual.widgets import Input
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            field = screen.query_one("#set-protected-paths", Input)
+            field.value = "  notes.md , , notes.md,sub\\dir\\ ;   "
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+            # parse_path_list() normalises separators to "/" and strips
+            # trailing slashes while preserving order and dropping dupes.
+            assert self.app.config.protected_paths == [
+                "notes.md", "sub/dir",
+            ]
+        self._run(self._pet_scenario()(body))
+
+    def test_settings_normalizes_existing_protected_paths_on_apply(self):
+        from nix.ui import SettingsModal
+
+        async def body(pilot, ui):
+            self.app.config.protected_paths = ["  a.md  ", "a.md", "", "b.md"]
+            self.app.handle_command("settings")
+            await pilot.pause(0.5)
+            screen = pilot.app.screen
+            assert isinstance(screen, SettingsModal)
+            await pilot.click("#set-apply")
+            await pilot.pause(0.5)
+            assert self.app.config.protected_paths == ["a.md", "b.md"]
+        self._run(self._pet_scenario()(body))
+
+    def test_command_history_trimmed_by_configured_size(self):
+        async def body(pilot, ui):
+            cmd = pilot.app.query_one("#cmd")
+            for command in ("deps", "destruct", "defs", "notes"):
+                cmd.value = command
+                await cmd.action_submit()
+                await pilot.pause(0.1)
+            assert ui._cmd_history == ["deps", "destruct", "defs", "notes"]
+
+            self.app.config.command_history_size = 2
+            ui._apply_history_limit()
+            assert ui._cmd_history == ["defs", "notes"]
+
+            self.app.config.command_history_size = 0
+            ui._apply_history_limit()
+            assert ui._cmd_history == []
+        self._run(self._pet_scenario()(body))
+
+    def test_command_history_trimmed_on_each_submitted_command(self):
+        async def body(pilot, ui):
+            self.app.config.command_history_size = 2
+            cmd = pilot.app.query_one("#cmd")
+            for command in ("deps", "destruct", "defs"):
+                cmd.value = command
+                await cmd.action_submit()
+                await pilot.pause(0.1)
+            assert ui._cmd_history == ["destruct", "defs"]
+        self._run(self._pet_scenario()(body))
+
+
+def _empty_info():
+    from nix.scanner import ProjectInfo
+
+    return ProjectInfo(root=Path("."), files=0, directories=0, extensions={},
+                       functions=0, classes=0, total_lines=0, source_files=0)
 
 
 if __name__ == "__main__":

@@ -187,5 +187,76 @@ class RecordTests(TestMutation):
         self.assertIsNone(app.pet)
 
 
+class AutoCommitTests(TestMutation):
+    def _git_init(self, app):
+        from nix.git import Git
+
+        git = Git(app.root)
+        if git.is_repo():
+            return git
+        self.run_git = git
+        import subprocess
+
+        subprocess.run(["git", "init", "-q"], cwd=str(app.root), check=True)
+        subprocess.run(["git", "config", "user.email", "t@t.t"],
+                       cwd=str(app.root), check=True)
+        subprocess.run(["git", "config", "user.name", "T"],
+                       cwd=str(app.root), check=True)
+        return git
+
+    def _committed_paths(self, git):
+        result = git._run("show", "--name-only", "--format=", "HEAD")
+        return {line.strip() for line in result.lines if line.strip()}
+
+    def test_disabled_by_default_no_commit(self):
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.config.checkpoint_on_mutate = False
+        git = self._git_init(app)
+        app.mutations.record("mut", "src/app.py", "backup")
+        self.assertEqual(git.log(1), [])
+
+    def test_commits_only_mutated_file(self):
+        app = self._make_app({
+            "src/app.py": "x = 1\n",
+            "src/other.py": "y = 2\n",
+        }, with_pet=False)
+        app.config.checkpoint_on_mutate = False
+        app.config.git_auto_commit = True
+        git = self._git_init(app)
+        app.mutations.record("mut", "src/app.py", "backup")
+        (app.root / "src" / "other.py").write_text("y = 3\n",
+                                                   encoding="utf-8")
+        git.add_file(app.root / "src" / "app.py")
+        git.commit("seed")
+        app.mutations.record("mut", "src/app.py", "backup2")
+        self.assertEqual(self._committed_paths(git), {"src/app.py"})
+
+    def test_commit_message_includes_kind_and_path(self):
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.config.checkpoint_on_mutate = False
+        app.config.git_auto_commit = True
+        git = self._git_init(app)
+        app.mutations.record("mut", "src/app.py", "backup")
+        self.assertTrue(git.log(1)[0].endswith("nix: mut src/app.py"))
+
+    def test_non_git_root_is_journaled_not_raised(self):
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.config.checkpoint_on_mutate = False
+        app.config.git_auto_commit = True
+        app.mutations.record("mut", "src/app.py", "backup")
+        messages = [e["message"] for e in app.journal.read_today()
+                    if e["kind"] == "GIT"]
+        self.assertTrue(any("not a git repo" in m for m in messages))
+
+    def test_nix_state_not_committed(self):
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.config.checkpoint_on_mutate = False
+        app.config.git_auto_commit = True
+        git = self._git_init(app)
+        app.mutations.record("mut", "src/app.py", "backup")
+        self.assertEqual(self._committed_paths(git), {"src/app.py"})
+        self.assertEqual(git._run("diff", "--cached", "--name-only").lines, [])
+
+
 if __name__ == "__main__":
     unittest.main()
