@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Invalid numeric input now keeps the settings modal open and leaves the
   stored config untouched, instead of silently applying.
 - Fixed the EN label `"set.section_input"`, which was left as a raw key.
+- The sdist now ships `VERSION` and `CHANGELOG.md`. `MANIFEST.in` shipped
+  `tests/` but omitted `VERSION`, so the version-consistency test raised
+  `FileNotFoundError` for anyone running the suite from an unpacked sdist.
+  The sdist is now self-verifying.
 
 ### Tests
 - 301 tests pass (`12 subtests`), including new regression coverage for
