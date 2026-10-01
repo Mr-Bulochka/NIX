@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill_ref:
-        description: "Tag (e.g. v0.3.6) or commit SHA of an already-released version to publish to PyPI. Leave empty to skip backfill."
+        description: "Tag (e.g. v0.3.6) or commit SHA of an already-released version to publish. Rebuilds assets, creates or updates the GitHub release, and publishes to PyPI (skipping files that already exist). Leave empty to do nothing."
         required: false
         type: string
 
@@ -62,24 +62,37 @@ jobs:
       - name: Check metadata
         run: uv run --group dev twine check dist/*
 
-      - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+      - name: Create or update GitHub release
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/* --clobber
+            echo "::notice::Updated existing release $TAG_NAME (assets replaced)"
+          else
+            gh release create "$TAG_NAME" dist/* --generate-notes --verify-tag
+            echo "::notice::Created release $TAG_NAME"
+          fi
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   backfill:
-    name: backfill existing release to PyPI
+    name: backfill existing release to GitHub and PyPI
     if: github.event_name == 'workflow_dispatch' && inputs.backfill_ref != ''
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     environment: release
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.backfill_ref }}
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -89,6 +102,44 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Resolve release tag
+        id: ref
+        env:
+          BACKFILL_REF: ${{ inputs.backfill_ref }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/${BACKFILL_REF}" >/dev/null; then
+            tag="${BACKFILL_REF}"
+          else
+            tag=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | head -n 1 || true)
+            if [ -z "$tag" ]; then
+              echo "::error::No v* version tag points at $BACKFILL_REF; refusing to guess a release tag"
+              exit 1
+            fi
+          fi
+          tag_commit=$(git rev-parse "${tag}^{commit}")
+          head_commit=$(git rev-parse HEAD)
+          if [ "$tag_commit" != "$head_commit" ]; then
+            echo "::error::Tag $tag resolves to $tag_commit but checked out HEAD is $head_commit"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "::notice::Resolved $BACKFILL_REF to $tag ($head_commit)"
+
+      - name: Verify tag matches project version
+        env:
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tag_version="${TAG_NAME#v}"
+          pyproject_version=$(uv run --no-project --python 3.12 python -c \
+            "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag=$tag_version pyproject=$pyproject_version"
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "::error::Tag $TAG_NAME does not match pyproject.toml version $pyproject_version"
+            exit 1
+          fi
+
       - name: Build sdist and wheel from ${{ inputs.backfill_ref }}
         run: |
           uv build
@@ -96,6 +147,7 @@ jobs:
 
       - name: Report built version
         run: |
+          set -euo pipefail
           sdist=$(ls dist/*.tar.gz 2>/dev/null | head -n 1)
           wheel=$(ls dist/*.whl 2>/dev/null | head -n 1)
           if [ -z "$sdist" ] || [ -z "$wheel" ]; then
@@ -107,6 +159,19 @@ jobs:
 
       - name: Check metadata
         run: uv tool run --from twine twine check dist/*
+
+      - name: Create or update GitHub release
+        env:
+          TAG_NAME: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/* --clobber
+            echo "::notice::Updated existing release $TAG_NAME (assets replaced)"
+          else
+            gh release create "$TAG_NAME" dist/* --generate-notes --verify-tag
+            echo "::notice::Created release $TAG_NAME"
+          fi
 
       - name: Publish to PyPI (skip existing files)
         uses: pypa/gh-action-pypi-publish@release/v1

@@ -470,6 +470,24 @@ class TestTUI(unittest.TestCase):
                 assert not box.has_class("visible")
         self._run(scenario())
 
+    def test_animation_tick_is_safe_after_teardown(self):
+        """A late animation tick must not raise after the screen is gone."""
+
+        async def scenario():
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+            # The app is shut down and the default screen's children are
+            # detached. A queued animation timer tick used to fire here and
+            # raise NoMatches for "#pet-box", failing an unrelated test.
+            ui._tick()
+            ui._refresh_pet(animate=True)
+        self._run(scenario())
+
     def test_suggest_respects_max_items(self):
         from textual.widgets import Input
 

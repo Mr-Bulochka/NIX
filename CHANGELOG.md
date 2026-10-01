@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-10-01
+
+### Fixed
+- The animation timer no longer raises after the screen has been torn down.
+  `_tick()` now returns early when the app is not running, and `_refresh_pet()`
+  treats a missing/ambiguous `#pet-box` or `#top-pet-name` as a no-op instead of
+  letting `NoMatches` escape. A late tick from a queued timer used to fail an
+  otherwise unrelated test.
+
+### Changed
+- The release workflow is now idempotent. A tag push updates an existing GitHub
+  release and re-uploads assets with `--clobber` instead of failing, and the
+  PyPI publish step uses `skip-existing`, so a re-run of a tag no longer breaks
+  mid-way.
+- The `backfill_ref` job rebuilds the assets, creates *or* updates the GitHub
+  release, and publishes to PyPI. It now verifies that the requested tag matches
+  the `pyproject.toml` version and that the tag resolves to the checked-out
+  commit, so a wrong ref fails loudly instead of publishing a mismatched build.
+
 ## [0.3.9] - 2026-09-30
 
 ### Added

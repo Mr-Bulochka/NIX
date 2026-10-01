@@ -12,6 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
+from textual.css.query import NoMatches, TooManyMatches, WrongType
 from textual.timer import Timer
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -1468,15 +1469,20 @@ class NixUI(App):
         return time.monotonic() < self._celebrate_until
 
     def _tick(self) -> None:
+        if not self.is_running:
+            return
         self._spin = (self._spin + 1) % len(SPINNER)
         if self.nix.config.animations_enabled or self._celebrating:
             self._blink = (self._blink + 1) % 4
             self._refresh_pet(animate=True)
 
     def _refresh_pet(self, animate: bool = False) -> None:
+        try:
+            box = self.query_one("#pet-box", Static)
+            name_label = self.query_one("#top-pet-name", Label)
+        except (NoMatches, TooManyMatches, WrongType):
+            return
         pet = self.nix.pet or {}
-        box = self.query_one("#pet-box", Static)
-        name_label = self.query_one("#top-pet-name", Label)
         if not pet:
             box.update(Text(self._t("pet.no_pet"), style=DIM))
             name_label.update(Text())
