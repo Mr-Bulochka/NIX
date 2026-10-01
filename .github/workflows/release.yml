@@ -76,10 +76,32 @@ jobs:
             echo "::notice::Created release $TAG_NAME"
           fi
 
-      - name: Publish to PyPI
+      - name: Detect PyPI auth mode
+        id: pypi_auth
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PYPI_API_TOKEN" ]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+            echo "::notice::PYPI_API_TOKEN is set; publishing with API token auth"
+          else
+            echo "mode=oidc" >> "$GITHUB_OUTPUT"
+            echo "::notice::PYPI_API_TOKEN is not set; publishing with OIDC trusted publishing"
+          fi
+
+      - name: Publish to PyPI (OIDC trusted publishing)
+        if: steps.pypi_auth.outputs.mode == 'oidc'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+      - name: Publish to PyPI (API token)
+        if: steps.pypi_auth.outputs.mode == 'token'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
   backfill:
     name: backfill existing release to GitHub and PyPI
@@ -175,7 +197,29 @@ jobs:
             echo "::notice::Created release $TAG_NAME"
           fi
 
-      - name: Publish to PyPI (skip existing files)
+      - name: Detect PyPI auth mode
+        id: pypi_auth
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PYPI_API_TOKEN" ]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+            echo "::notice::PYPI_API_TOKEN is set; publishing with API token auth"
+          else
+            echo "mode=oidc" >> "$GITHUB_OUTPUT"
+            echo "::notice::PYPI_API_TOKEN is not set; publishing with OIDC trusted publishing"
+          fi
+
+      - name: Publish to PyPI (OIDC trusted publishing)
+        if: steps.pypi_auth.outputs.mode == 'oidc'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+      - name: Publish to PyPI (API token)
+        if: steps.pypi_auth.outputs.mode == 'token'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          password: ${{ secrets.PYPI_API_TOKEN }}
