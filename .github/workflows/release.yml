@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      backfill_ref:
+        description: "Tag (e.g. v0.3.6) or commit SHA of an already-released version to publish to PyPI. Leave empty to skip backfill."
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.backfill_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: publish tag release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install project
+        run: uv sync --locked --group dev
+
+      - name: Verify tag matches project version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          tag_version="${TAG_NAME#v}"
+          pyproject_version=$(uv run --group dev python -c \
+            "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag=$tag_version pyproject=$pyproject_version"
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "::error::Tag $TAG_NAME does not match pyproject.toml version $pyproject_version"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: uv run --group dev pytest -q
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check metadata
+        run: uv run --group dev twine check dist/*
+
+      - name: Create GitHub release
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  backfill:
+    name: backfill existing release to PyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.backfill_ref != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.backfill_ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build sdist and wheel from ${{ inputs.backfill_ref }}
+        run: |
+          uv build
+          ls -l dist
+
+      - name: Report built version
+        run: |
+          sdist=$(ls dist/*.tar.gz 2>/dev/null | head -n 1)
+          wheel=$(ls dist/*.whl 2>/dev/null | head -n 1)
+          if [ -z "$sdist" ] || [ -z "$wheel" ]; then
+            echo "::error::Build for ${{ inputs.backfill_ref }} did not produce both sdist and wheel"
+            ls -l dist
+            exit 1
+          fi
+          echo "::notice::Backfill ${{ inputs.backfill_ref }} built: $sdist, $wheel"
+
+      - name: Check metadata
+        run: uv tool run --from twine twine check dist/*
+
+      - name: Publish to PyPI (skip existing files)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-09-30
+
+### Added
+- Seven new settings, all editable in the settings modal and applied live:
+  header clock, log line limit, animation interval, command history size,
+  pill cooldown, default command timeout and protected paths.
+- Declarative settings registry (`SettingSpec` / `SETTING_SPECS`) that drives
+  modal layout, validation and the derived `TOGGLE_KEYS` / `INT_KEYS` /
+  `FLOAT_KEYS` / `PATHS_KEYS` maps. The autocomplete-specific maps remain
+  available as compatibility aliases.
+- `show_clock`, `log_max_lines`, `animation_interval`,
+  `command_history_size`, `pill_cooldown_minutes`, `default_command_timeout`
+  and `protected_paths` config fields, all bounded and normalized on load.
+- Public `parse_path_list()` helper: splits on comma, semicolon and newline,
+  trims entries, drops empties, normalizes separators, removes duplicates and
+  preserves order.
+- New "Input & history" settings section in EN and RU.
+
+### Changed
+- `nix.bat` now launches the local checkout via `pushd "%~dp0"` and prefers
+  `.venv\Scripts\python.exe -m nix`, falling back to `python`. Previously the
+  launcher depended on the caller's working directory, which broke
+  `State.nix` (it resolves paths from `Path.cwd()`).
+- Apply re-reads every settings control from the DOM instead of relying only on
+  `Input.Submitted`, so typed-but-unsubmitted values are no longer lost.
+- The settings modal is generated from the registry, and the header clock is
+  toggled in place through `#hdr-clock` / `#hdr-noclock` because Textual
+  `Header.__init__` has no runtime `show_clock` parameter.
+- Pill cooldown is read from config; `0` disables it. The hardcoded cooldown is
+  gone and values are capped at 1440 minutes.
+- `cmd_run` and `cmd_destruct` use the configured command timeout instead of
+  the internal runner default. The internal `timeout=10` in `nix/git.py` is
+  unchanged.
+- Command history is trimmed to `command_history_size` after every submitted
+  command; `0` clears it.
+
+### Fixed
+- Startup auto-scan no longer produces UI, journal or mood side effects.
+  Checkpoints plus `Git.add_file(path)` give a target-only auto-commit, so
+  auto-scan can no longer commit unrelated working-tree changes.
+- Values written via `setattr()` are no longer left unnormalized; Apply
+  explicitly re-runs `protected_paths` normalization because `setattr()` does
+  not trigger `Config.__post_init__()`.
+- Invalid numeric input now keeps the settings modal open and leaves the
+  stored config untouched, instead of silently applying.
+- Fixed the EN label `"set.section_input"`, which was left as a raw key.
+
+### Tests
+- 301 tests pass (`12 subtests`), including new regression coverage for
+  settings persistence, clamping, rejection of non-numeric input, path
+  normalization, live clock/log/timer/history apply and command-history
+  trimming.
+
 ## [0.3.8] - 2026-09-28
 
 ### Added
@@ -109,7 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Release packaging with bundled modules in the wheel.
 - MIT-0 license (no attribution required).
 
-[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.8...v0.3.9
+[0.3.8]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.4...v0.3.5

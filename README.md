@@ -58,9 +58,20 @@ modern TUI in the terminal.
 
 ## Install
 
+### From PyPI (recommended)
+
+```bash
+pip install cli-nix
+nix
+```
+
+Upgrade to the latest published version with `pip install -U cli-nix`.
+Prefer an isolated environment? `uv tool install cli-nix` installs the `nix`
+command in its own environment and leaves your system Python untouched.
+
 ### From a git clone (any platform)
 
-**uv (fast, recommended) — Python 3.11+ on any platform**
+**uv (fast — Python 3.11+ on any platform)**
 
 ```bash
 git clone https://github.com/Mr-Bulochka/NIX.git
@@ -87,22 +98,6 @@ git clone https://github.com/Mr-Bulochka/NIX.git
 cd NIX
 python3 -m pip install -r requirements.txt
 python3 -m nix
-```
-
-### From PyPI
-
-```bash
-pip install cli-nix
-nix
-```
-
-### From the latest GitHub Release
-
-Check the **Releases** tab for the current `.whl`, then:
-
-```bash
-pip install https://github.com/Mr-Bulochka/NIX/releases/download/v0.3.5/cli_nix-0.3.5-py3-none-any.whl
-nix
 ```
 
 ### Platform support
@@ -351,15 +346,67 @@ uv run pytest                 # run the test suite (pytest, with subtests)
 uv run python -m nix          # start the TUI
 ```
 
-## Build a release
+## Release
+
+The version is kept in three places — `VERSION`, `pyproject.toml` and
+`nix/__init__.py`. `tests/test_version.py` fails the build if they drift
+apart, so bump all three together.
+
+### Publish a new version
+
+1. Update the version in `VERSION`, `pyproject.toml` and `nix/__init__.py`
+2. Add the release entry to `CHANGELOG.md`
+3. Commit, then tag the commit with `v<version>` (e.g. `v0.3.9`) and push the tag
+
+Pushing the tag runs `.github/workflows/release.yml`, which verifies the tag
+matches the project version, runs the tests, builds the sdist and wheel,
+validates the metadata with `twine check`, creates the GitHub Release and
+publishes to PyPI.
+
+### One-time PyPI setup
+
+Publishing uses [trusted publishing](https://docs.pypi.org/trusted-publishers/),
+so no API token is stored in the repository. Add a pending publisher on
+pypi.org for the `cli-nix` project:
+
+| Field | Value |
+|-------|-------|
+| Repository | `Mr-Bulochka/NIX` |
+| Workflow | `release.yml` |
+| Environment | `release` |
+
+The `release` environment is configured with required reviewers if you want
+an approval gate before anything reaches PyPI.
+
+### Check a build locally
 
 ```bash
 uv build
+uv run --group dev twine check dist/*
 ```
 
-Produces `dist/cli_nix-<version>*.whl` and `.tar.gz` (the wheel embeds
-all bundled language modules). Attach both to a GitHub Release to let anyone
-`pip install` the program directly.
+The wheel embeds all bundled language modules, so a plain
+`pip install dist/cli_nix-<version>-py3-none-any.whl` gives a working install.
+
+### Backfilling an unpublished version
+
+Versions `0.3.2`–`0.3.8` were released on GitHub but never uploaded to PyPI.
+To publish one, go to **Actions → Release → Run workflow** and set
+`backfill_ref` to a tag or a commit SHA:
+
+| Version | `backfill_ref` |
+|---------|----------------|
+| 0.3.2 | `c4d7975` |
+| 0.3.3 | `6eb9d44` |
+| 0.3.4 | `f471f3d` |
+| 0.3.5 | `v0.3.5` |
+| 0.3.6 | `v0.3.6` |
+| 0.3.7 | `v0.3.7` |
+| 0.3.8 | `v0.3.8` |
+
+The backfill job checks out the historical ref, builds from it, and uploads
+with `skip-existing: true` — so it can never overwrite a file that is already
+on PyPI. Each ref is independent, so run it once per version.
 
 ## License
 
