@@ -36,6 +36,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "session.hint": "type help or press buttons below",
         "pet.created": "pet created: {name}",
         "pet.no_pet": "no pet yet",
+        "pet.avatar_off": "[ avatar disabled ]",
+        "sys.auto_scan": "auto scan: {files} files, {lines} lines",
 
         # help/status/settings/logs/history
         "help.grp.core": "Core",
@@ -149,7 +151,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "set.git": "Git auto commit",
         "set.protected": "Protected",
         "set.skin": "Skin",
-        "set.pill": "Skin pill (30 min cooldown):",
+        "set.pill": "Skin pill:",
         "set.pill_give": "Give pill",
         "set.pill_cd": "cooldown {min} min",
         "set.pill_ready": "ready",
@@ -159,9 +161,29 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "set.priority_lang": "Priority language",
         "set.modules": "Code modules",
         "set.auto": "Auto",
+        "set.autocomplete": "Command autocomplete",
+        "set.ac_enabled": "Autocomplete",
+        "set.ac_min_chars": "Min chars",
+        "set.ac_max_items": "Max items",
+        "set.ac_case_insensitive": "Case insensitive",
+        "set.ac_descriptions": "Show descriptions",
+
+        # settings sections and new fields
+        "set.section_appearance": "Appearance",
+        "set.section_input": "Input & history",
+        "set.section_behavior": "Behaviour",
+        "set.clock": "Show clock",
+        "set.log_max_lines": "Log lines",
+        "set.animation_interval": "Animation interval (s)",
+        "set.history_size": "Command history",
+        "set.pill_cooldown": "Pill cooldown (min)",
+        "set.default_timeout": "Default timeout (s)",
+        "set.protected_paths": "Protected paths",
+        "set.protected_paths_hint": "comma or semicolon separated",
 
         # settings field validation
         "fb.int_invalid": "enter a whole number",
+        "fb.num_invalid": "enter a number",
 
         # scan
         "scan.files": "files",
@@ -436,6 +458,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "session.hint": "наберите help или нажмите кнопки ниже",
         "pet.created": "питомец создан: {name}",
         "pet.no_pet": "питомца ещё нет",
+        "pet.avatar_off": "[ аватар отключён ]",
+        "sys.auto_scan": "авто-скан: {files} файлов, {lines} строк",
 
         # help/status/settings/logs/history
         "help.grp.core": "Ядро",
@@ -549,7 +573,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "set.git": "Авто-коммит Git",
         "set.protected": "Защищённые",
         "set.skin": "Скин",
-        "set.pill": "Таблетка скина (перезарядка 30 мин):",
+        "set.pill": "Таблетка скина:",
         "set.pill_give": "Дать таблетку",
         "set.pill_cd": "перезарядка {min} мин",
         "set.pill_ready": "готова",
@@ -559,9 +583,29 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "set.priority_lang": "Приоритетный язык",
         "set.modules": "Модули языков",
         "set.auto": "Авто",
+        "set.autocomplete": "Автодополнение команд",
+        "set.ac_enabled": "Автодополнение",
+        "set.ac_min_chars": "Мин. символов",
+        "set.ac_max_items": "Макс. подсказок",
+        "set.ac_case_insensitive": "Игнорировать регистр",
+        "set.ac_descriptions": "Показывать описания",
+
+        # settings sections and new fields
+        "set.section_appearance": "Вид",
+        "set.section_input": "Ввод и история",
+        "set.section_behavior": "Поведение",
+        "set.clock": "Часы в шапке",
+        "set.log_max_lines": "Строк в логе",
+        "set.animation_interval": "Интервал анимации (с)",
+        "set.history_size": "История команд",
+        "set.pill_cooldown": "Перезарядка таблетки (мин)",
+        "set.default_timeout": "Таймаут команд (с)",
+        "set.protected_paths": "Защищённые пути",
+        "set.protected_paths_hint": "через запятую или точку с запятой",
 
         # settings field validation
         "fb.int_invalid": "введите целое число",
+        "fb.num_invalid": "введите число",
 
         # scan
         "scan.files": "файлов",

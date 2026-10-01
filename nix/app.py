@@ -16,6 +16,21 @@ from .mutation import MutationEngine
 PILL_COOLDOWN = 30 * 60
 
 
+def pill_cooldown_seconds(config) -> int:
+    """Pill cooldown in seconds, derived from ``config.pill_cooldown_minutes``.
+
+    Falls back to the historical 30 minute constant when the value is missing
+    or unusable, so callers never have to guard against a bad config.
+    """
+    try:
+        minutes = int(getattr(config, "pill_cooldown_minutes", 30))
+    except (TypeError, ValueError):
+        return PILL_COOLDOWN
+    if minutes <= 0:
+        return 0
+    return min(minutes, 1440) * 60
+
+
 def _tokenize_nix(text: str) -> list[tuple[str, str]]:
     """Split a command line into args and chain separators.
 
@@ -111,7 +126,10 @@ class NixApp:
         if pet is None:
             return None
         last = pet.get("last_pill_at") or 0
-        return max(0.0, PILL_COOLDOWN - (utc_now_ts() - last))
+        cooldown = pill_cooldown_seconds(self.config)
+        if cooldown <= 0:
+            return None
+        return max(0.0, cooldown - (utc_now_ts() - last))
 
     def give_pill(self) -> tuple[bool, str]:
         pet = self.pet

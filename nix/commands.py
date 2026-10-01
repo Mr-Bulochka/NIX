@@ -116,6 +116,12 @@ def _num(value, default: int) -> int:
         return default
 
 
+def _timeout(app, value) -> int:
+    """Resolve a ``--timeout`` flag, falling back to the configured default."""
+    default = _num(getattr(app.config, "default_command_timeout", 120), 120)
+    return _num(value, default)
+
+
 LANG_NAMES = {
     ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript",
     ".jsx": "JSX", ".tsx": "TSX", ".rs": "Rust", ".go": "Go",
@@ -427,8 +433,8 @@ def cmd_tests(app: "NixApp", args: list[str]) -> CommandResult:
 @register("run", "run all tests", "run [--timeout N]")
 def cmd_run(app):
     flags = parse_flags(app.args, {"timeout"})
-    from .runner import DEFAULT_TIMEOUT, run_tests
-    timeout = _num(flags.get("timeout"), DEFAULT_TIMEOUT)
+    from .runner import run_tests
+    timeout = _timeout(app, flags.get("timeout"))
     app.ui.show_message("SYSTEM", app.t("run.start"))
     run = run_tests(app.root, timeout=timeout)
     fail = run.failed + run.errors
@@ -791,7 +797,6 @@ def cmd_destruct(app):
     max_mutations = _num(flags.get("max"), 0) or None
     keep = bool(flags.get("keep"))
     from .destruct import plan_mutations, run_destruct
-    from .runner import DEFAULT_TIMEOUT
     if "apply" not in flags:
         plan = plan_mutations(app.root, max_mutations)
         if not plan:
@@ -803,7 +808,7 @@ def cmd_destruct(app):
         )
         app.ui.show_message("SYSTEM", app.t("fb.destruct_dry", n=len(plan)))
         return CommandResult()
-    report = run_destruct(app, timeout=_num(flags.get("timeout"), DEFAULT_TIMEOUT), max_mutations=max_mutations, keep=keep)
+    report = run_destruct(app, timeout=_timeout(app, flags.get("timeout")), max_mutations=max_mutations, keep=keep)
     if not report.candidates:
         app.ui.show_message("AWARE", app.t("fb.destruct_no_plan"))
         return CommandResult()

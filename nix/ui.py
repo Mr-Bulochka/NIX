@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import copy
 import time
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
@@ -11,14 +12,21 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
+from textual.timer import Timer
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button, Footer, Header, Input, Label, RichLog, Select, Static, Switch,
+)
+from textual.widgets._header import (
+    HeaderClock, HeaderClockSpace, HeaderIcon, HeaderTitle,
 )
 
 from .avatar import (genes_for as avatar_genes_for, render as render_avatar,
                        idle_look)
 from .avatar import VARIANT_KINDS
+from .commands import get_all_commands
+from .config import DEFAULT_PROTECTED_PATHS, parse_path_list
+from .scanner import scan_project
 from .i18n import LANGUAGES, t as _t
 from .modules import all_modules
 
@@ -189,10 +197,17 @@ Screen {{
 #btn-settings {{ color: {YELLOW}; }}
 #btn-quit {{ color: {RED}; }}
 
-#cmd {{
+#cmdwrap {{
     dock: bottom;
-    height: 3;
+    height: auto;
+    max-height: 50%;
     margin: 0 2 1 2;
+    background: {BG};
+}}
+
+#cmd {{
+    height: 3;
+    margin: 0;
     padding: 0 1;
     border: round {BORDER};
     background: {PANEL};
@@ -201,6 +216,23 @@ Screen {{
 
 #cmd:focus {{
     border: round {BLUE};
+}}
+
+#suggest {{
+    display: none;
+    height: auto;
+    max-height: 100%;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    border: round {BORDER};
+    border-bottom: none;
+    background: {PANEL};
+    color: {DIM};
+}}
+
+#suggest.visible {{
+    display: block;
 }}
 
 Footer {{
@@ -406,21 +438,147 @@ class FirstLaunchScreen(ModalScreen[dict]):
         self.dismiss({"name": name, "language": self._lang})
 
 
+@dataclass(frozen=True)
+class SettingSpec:
+    """Declarative description of a single toggle/numeric settings control.
+
+    ``kind`` drives both the widget that gets mounted and how the value is
+    parsed on Apply: ``switch`` -> ``Switch``, ``int``/``float`` -> ``Input``
+    parsed and clamped to ``low``/``high``, ``paths`` -> ``Input`` parsed by
+    :func:`nix.config.parse_path_list`.
+    """
+    widget_id: str
+    key: str
+    kind: str
+    section: str
+    low: float | None = None
+    high: float | None = None
+    label_key: str | None = None
+
+    @property
+    def label(self) -> str:
+        return self.label_key or f"set.{self.key}"
+
+
+SETTING_SPECS: tuple[SettingSpec, ...] = (
+    # -- appearance ------------------------------------------------------
+    SettingSpec("set-tamagotchi", "tamagotchi_enabled", "switch",
+                "appearance", label_key="set.tamagotchi"),
+    SettingSpec("set-animations", "animations_enabled", "switch",
+                "appearance", label_key="set.animations"),
+    SettingSpec("set-avatar", "avatar_enabled", "switch",
+                "appearance", label_key="set.avatar"),
+    SettingSpec("set-sounds", "sounds_enabled", "switch",
+                "appearance", label_key="set.sounds"),
+    SettingSpec("set-clock", "show_clock", "switch", "appearance",
+                label_key="set.clock"),
+    SettingSpec("set-log-max-lines", "log_max_lines", "int",
+                "appearance", 50, 5000),
+    SettingSpec("set-animation-interval", "animation_interval", "float",
+                "appearance", 0.1, 10.0),
+    # -- input & history -------------------------------------------------
+    SettingSpec("set-ac-enabled", "autocomplete_enabled", "switch", "input",
+                label_key="set.ac_enabled"),
+    SettingSpec("set-ac-case-insensitive", "autocomplete_case_insensitive",
+                "switch", "input", label_key="set.ac_case_insensitive"),
+    SettingSpec("set-ac-descriptions", "autocomplete_show_descriptions",
+                "switch", "input", label_key="set.ac_descriptions"),
+    SettingSpec("set-ac-min-chars", "autocomplete_min_chars", "int",
+                "input", 0, 10, label_key="set.ac_min_chars"),
+    SettingSpec("set-ac-max-items", "autocomplete_max_items", "int",
+                "input", 1, 50, label_key="set.ac_max_items"),
+    SettingSpec("set-history-size", "command_history_size", "int",
+                "input", 0, 500, label_key="set.history_size"),
+    # -- behaviour -------------------------------------------------------
+    SettingSpec("set-auto-scan", "auto_scan", "switch", "behavior",
+                label_key="set.auto_scan"),
+    SettingSpec("set-checkpoint", "checkpoint_on_mutate", "switch",
+                "behavior", label_key="set.checkpoint"),
+    SettingSpec("set-git", "git_auto_commit", "switch", "behavior",
+                label_key="set.git"),
+    SettingSpec("set-pill-cooldown", "pill_cooldown_minutes", "int",
+                "behavior", 0, 1440, label_key="set.pill_cooldown"),
+    SettingSpec("set-timeout", "default_command_timeout", "int",
+                "behavior", 5, 3600, label_key="set.default_timeout"),
+    SettingSpec("set-protected-paths", "protected_paths", "paths",
+                "behavior", label_key="set.protected_paths"),
+)
+
+SECTION_ORDER = ("appearance", "input", "behavior")
+SECTION_KEYS = {
+    "appearance": "set.section_appearance",
+    "input": "set.section_input",
+    "behavior": "set.section_behavior",
+}
+
+AC_SPEC_IDS = (
+    "set-ac-enabled",
+    "set-ac-case-insensitive",
+    "set-ac-descriptions",
+    "set-ac-min-chars",
+    "set-ac-max-items",
+)
+
+# Derived views over the declarative registry. Kept as module-level dicts so
+# they can be consumed by the modal, by tests and by external tooling.
+TOGGLE_KEYS = {
+    spec.widget_id: spec.key
+    for spec in SETTING_SPECS
+    if spec.kind == "switch"
+}
+
+INT_KEYS = {
+    spec.widget_id: (spec.key, int(spec.low or 0), int(spec.high or 0))
+    for spec in SETTING_SPECS
+    if spec.kind == "int"
+}
+
+FLOAT_KEYS = {
+    spec.widget_id: (spec.key, float(spec.low or 0.0),
+                     float(spec.high or 0.0))
+    for spec in SETTING_SPECS
+    if spec.kind == "float"
+}
+
+PATHS_KEYS = {
+    spec.widget_id: spec.key
+    for spec in SETTING_SPECS
+    if spec.kind == "paths"
+}
+
+# Backwards compatible autocomplete-only subsets.
+AUTOCOMPLETE_SWITCH_KEYS = {
+    wid: TOGGLE_KEYS[wid] for wid in AC_SPEC_IDS if wid in TOGGLE_KEYS
+}
+
+AUTOCOMPLETE_INT_KEYS = {
+    wid: INT_KEYS[wid] for wid in AC_SPEC_IDS if wid in INT_KEYS
+}
+
+
+def _specs_for(section: str) -> tuple[SettingSpec, ...]:
+    return tuple(s for s in SETTING_SPECS if s.section == section)
+
+
+def _spec_by_id(widget_id: str) -> SettingSpec | None:
+    for spec in SETTING_SPECS:
+        if spec.widget_id == widget_id:
+            return spec
+    return None
+
+
 class SettingsModal(ModalScreen[None]):
     BINDINGS = [
         Binding("escape", "close_settings", "Close", priority=True),
         Binding("ctrl+q", "close_settings", "", priority=True),
     ]
 
-    TOGGLE_KEYS = {
-        "set-tamagotchi": "tamagotchi_enabled",
-        "set-animations": "animations_enabled",
-        "set-avatar": "avatar_enabled",
-        "set-sounds": "sounds_enabled",
-        "set-auto-scan": "auto_scan",
-        "set-checkpoint": "checkpoint_on_mutate",
-        "set-git": "git_auto_commit",
-    }
+    TOGGLE_KEYS = TOGGLE_KEYS
+    INT_KEYS = INT_KEYS
+    FLOAT_KEYS = FLOAT_KEYS
+    PATHS_KEYS = PATHS_KEYS
+    AUTOCOMPLETE_SWITCH_KEYS = AUTOCOMPLETE_SWITCH_KEYS
+    AUTOCOMPLETE_INT_KEYS = AUTOCOMPLETE_INT_KEYS
 
     CSS = f"""
     SettingsModal {{
@@ -620,12 +778,12 @@ class SettingsModal(ModalScreen[None]):
                     t("set.mutation_budget"),
                     Input(str(draft.mutation_budget), id="set-budget"),
                 )
-                for wid, key in self.TOGGLE_KEYS.items():
-                    yield self._row(
-                        t(self._toggle_label(wid)),
-                        Switch(getattr(draft, key), id=wid),
-                    )
-                yield Label(t("set.modules"), classes="set-hint")
+                for section in SECTION_ORDER:
+                    yield Label(t(SECTION_KEYS[section]),
+                                 classes="set-hint set-section")
+                    for spec in _specs_for(section):
+                        yield self._spec_row(spec, draft)
+                yield Label(t("set.modules"), classes="set-hint set-section")
                 for m in self._mods():
                     yield self._row(
                         m.name,
@@ -639,16 +797,26 @@ class SettingsModal(ModalScreen[None]):
                 yield Button("", id="set-close", classes="set-btn")
                 yield Button("", id="set-apply")
 
+    def _spec_row(self, spec: SettingSpec, draft) -> Horizontal:
+        """Build the row for one registry entry from its declared kind."""
+        if spec.kind == "switch":
+            field = Switch(getattr(draft, spec.key), id=spec.widget_id)
+        elif spec.kind == "paths":
+            joined = ", ".join(getattr(draft, spec.key) or [])
+            field = Input(joined, id=spec.widget_id)
+        else:
+            field = Input(str(getattr(draft, spec.key)), id=spec.widget_id)
+        return self._row(self._t(spec.label), field)
+
     def _toggle_label(self, wid: str) -> str:
-        return self._t({
-            "set-tamagotchi": "set.tamagotchi",
-            "set-animations": "set.animations",
-            "set-avatar": "set.avatar",
-            "set-sounds": "set.sounds",
-            "set-auto-scan": "set.auto_scan",
-            "set-checkpoint": "set.checkpoint",
-            "set-git": "set.git",
-        }[wid])
+        spec = _spec_by_id(wid)
+        return self._t(spec.label) if spec else wid
+
+    def _ac_switch_label(self, wid: str) -> str:
+        return self._toggle_label(wid)
+
+    def _ac_field_label(self, wid: str) -> str:
+        return self._toggle_label(wid)
 
     def on_mount(self) -> None:
         self.query_one("#set-close", Button).label = self._t("modal.close")
@@ -707,15 +875,64 @@ class SettingsModal(ModalScreen[None]):
             return
         wid = getattr(event.input, "id", "")
         raw = event.value.strip()
+        if wid == "set-attempts":
+            val = self._parse_int_input(event.input, raw)
+            if val is None:
+                return
+            self._draft.attempts = max(0, min(val, self._cfg.max_attempts))
+            event.input.value = str(self._draft.attempts)
+            return
+        if wid == "set-budget":
+            val = self._parse_int_input(event.input, raw)
+            if val is None:
+                return
+            self._draft.mutation_budget = max(0, val)
+            event.input.value = str(self._draft.mutation_budget)
+            return
+        spec = _spec_by_id(wid)
+        if spec is None:
+            return
+        if not self._apply_spec_input(spec, event.input, raw):
+            return
+        value = getattr(self._draft, spec.key)
+        event.input.value = (
+            ", ".join(value) if spec.kind == "paths" else str(value)
+        )
+
+    def _parse_int_input(self, widget, raw: str) -> int | None:
         try:
-            val = int(raw)
+            return int(raw)
         except ValueError:
             self.notify(self._t("fb.int_invalid"), severity="error")
-            return
-        if wid == "set-attempts":
-            self._draft.attempts = max(0, min(val, self._cfg.max_attempts))
-        elif wid == "set-budget":
-            self._draft.mutation_budget = max(0, val)
+            widget.focus()
+            return None
+
+    def _apply_spec_input(self, spec: SettingSpec, widget, raw: str) -> bool:
+        """Parse, clamp and store one registry field. False means invalid."""
+        if spec.kind == "int":
+            try:
+                value: object = int(raw)
+            except ValueError:
+                self.notify(self._t("fb.int_invalid"), severity="error")
+                widget.focus()
+                return False
+            lo, hi = int(spec.low or 0), int(spec.high or 0)
+            setattr(self._draft, spec.key, max(lo, min(value, hi)))
+            return True
+        if spec.kind == "float":
+            try:
+                value = float(raw)
+            except ValueError:
+                self.notify(self._t("fb.num_invalid"), severity="error")
+                widget.focus()
+                return False
+            lo, hi = float(spec.low or 0.0), float(spec.high or 0.0)
+            setattr(self._draft, spec.key, max(lo, min(value, hi)))
+            return True
+        if spec.kind == "paths":
+            setattr(self._draft, spec.key, parse_path_list(raw))
+            return True
+        return False
 
     def on_switch_changed(self, event) -> None:
         if not self._input_ready:
@@ -754,7 +971,8 @@ class SettingsModal(ModalScreen[None]):
         self._update_pill()
 
     def action_apply_settings(self) -> None:
-        self._apply()
+        if not self._apply():
+            return
         self._ui._refresh_pet()
         self._ui._refresh_header()
         self.dismiss(None)
@@ -762,15 +980,44 @@ class SettingsModal(ModalScreen[None]):
     def action_close_settings(self) -> None:
         self.dismiss(None)
 
-    def _apply(self) -> None:
+    def _read_spec_inputs(self) -> bool:
+        """Re-read every registry ``Input`` on Apply.
+
+        Values typed but never submitted still have to land, so Apply parses
+        the widgets directly instead of relying on ``Input.Submitted``. The
+        modal stays open when any field is invalid.
+        """
+        for spec in SETTING_SPECS:
+            if spec.kind == "switch":
+                continue
+            try:
+                widget = self.query_one(f"#{spec.widget_id}", Input)
+            except Exception:
+                continue
+            if not self._apply_spec_input(spec, widget, widget.value.strip()):
+                return False
+        return True
+
+    def _apply(self) -> bool:
+        if not self._read_spec_inputs():
+            return False
         self._draft.enabled_modules = self._enabled_from_switches()
+        # setattr on an existing Config skips __post_init__, so re-normalise
+        # the list field explicitly.
+        self._draft.protected_paths = (
+            parse_path_list(self._draft.protected_paths)
+            or list(DEFAULT_PROTECTED_PATHS)
+        )
         for f in fields(self._cfg):
             setattr(self._cfg, f.name, getattr(self._draft, f.name))
         self._save(self._cfg)
         self._ui._apply_language()
         self._ui.nix.apply_module_settings()
+        self._ui._apply_pet_visibility()
+        self._ui._apply_runtime_settings()
         self._ui._refresh_pet()
         self._ui._refresh_header()
+        return True
 
     def on_unmount(self) -> None:
         self._input_ready = False
@@ -782,6 +1029,29 @@ class NixHeader(Header):
     def __init__(self, ui: "NixUI", show_clock: bool = True) -> None:
         super().__init__(show_clock=show_clock)
         self._ui = ui
+
+    def compose(self) -> ComposeResult:
+        """Always mount both clock widgets so the clock can be toggled live.
+
+        ``Header`` picks one variant at construction time, which Textual 8.x
+        does not support at runtime. Rendering both and switching ``display``
+        lets the ``show_clock`` setting apply without remounting the header.
+        """
+        yield HeaderIcon().data_bind(NixHeader.icon)
+        yield HeaderTitle()
+        yield HeaderClock(id="hdr-clock").data_bind(NixHeader.time_format)
+        yield HeaderClockSpace(id="hdr-noclock")
+
+    def on_mount(self) -> None:
+        self.set_clock_visible(bool(self._ui.nix.config.show_clock))
+
+    def set_clock_visible(self, visible: bool) -> None:
+        """Show or hide the header clock without remounting the widget."""
+        try:
+            self.query_one("#hdr-clock").display = visible
+            self.query_one("#hdr-noclock").display = not visible
+        except Exception:
+            pass
 
     def format_title(self) -> Content:
         ui = self._ui
@@ -824,7 +1094,12 @@ class NixUI(App):
         self._blink = 0
         self._cmd_history: list[str] = []
         self._cmd_hist_idx: int | None = None
+        self._suggest_items: list[tuple[str, str, str]] = []
+        self._suggest_idx: int = 0
+        self._suggest_applied: str | None = None
         self._celebrate_until = 0.0
+        self._auto_scan_done = False
+        self._anim_timer: Timer | None = None
 
     def on_resize(self, event) -> None:
         w, h = event.size.width, event.size.height
@@ -840,7 +1115,7 @@ class NixUI(App):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="app"):
-            yield NixHeader(self, show_clock=True)
+            yield NixHeader(self, show_clock=self.nix.config.show_clock)
             with Horizontal(id="top"):
                 with Vertical(id="pet-wrap"):
                     yield Static("", id="pet-box")
@@ -859,11 +1134,14 @@ class NixUI(App):
                 yield Button("", id="btn-status")
                 yield Button("", id="btn-settings")
                 yield Button("", id="btn-quit")
-            yield Input(id="cmd", placeholder="")
+            with Vertical(id="cmdwrap"):
+                yield Label("", id="suggest", classes="suggest")
+                yield Input(id="cmd", placeholder="")
             yield Footer()
 
     def on_mount(self) -> None:
         self._apply_language()
+        self._apply_pet_visibility()
         if self.nix.pet is None:
             self.push_screen(
                 FirstLaunchScreen(self.nix.config.language),
@@ -873,16 +1151,20 @@ class NixUI(App):
             self._refresh_pet()
             self._write_session_start()
             self.query_one("#cmd", Input).focus()
-        self.set_interval(1.0, self._tick)
+            self._auto_scan_if_enabled()
+        self._apply_timer()
+        self._apply_log_limits()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if getattr(event.input, "id", "") != "cmd":
             return
         raw = event.value.strip()
+        self._clear_suggestions()
         if not raw:
             return
         if not self._cmd_history or self._cmd_history[-1] != raw:
             self._cmd_history.append(raw)
+        self._apply_history_limit()
         self._cmd_hist_idx = None
         cmd_input = self.query_one("#cmd", Input)
         cmd_input.value = ""
@@ -891,35 +1173,77 @@ class NixUI(App):
         self._refresh_header()
         self._focus_cmd()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if getattr(event.input, "id", "") != "cmd":
+            return
+        if self._suggest_applied is not None:
+            if event.value == self._suggest_applied:
+                return
+            self._suggest_applied = None
+        self._update_suggestions(event.value)
+
+    def on_input_blur(self, event: Input.Blur) -> None:
+        if getattr(event.input, "id", "") != "cmd":
+            return
+        self._clear_suggestions()
+
+    def on_click(self, event) -> None:
+        if getattr(event.widget, "id", "") != "suggest":
+            return
+        if not self._suggest_items:
+            return
+        # The box has a round border, so content line 0 sits at offset y == 1.
+        idx = getattr(event, "offset", None)
+        idx = 0 if idx is None else idx.y - 1
+        if idx < 0 or idx >= len(self._suggest_items):
+            return
+        self._suggest_idx = idx
+        self._render_suggestions()
+        event.stop()
+
     def on_key(self, event) -> None:
         if getattr(self.focused, "id", None) != "cmd":
             return
         cmd = self.query_one("#cmd", Input)
         if event.key == "escape":
+            if self._suggest_items:
+                self._clear_suggestions()
+                event.stop()
+                return
             self._cmd_hist_idx = None
-            cmd.value = ""
-            cmd.cursor_position = 0
+            self._set_cmd_value("")
             event.stop()
             return
+        if event.key == "tab":
+            if self._suggest_items:
+                self._apply_suggestion()
+                event.stop()
+                return
         if event.key == "up":
+            if self._suggest_items:
+                self._move_suggestion(-1)
+                event.stop()
+                return
             if self._cmd_history:
                 if self._cmd_hist_idx is None:
                     self._cmd_hist_idx = len(self._cmd_history) - 1
                 else:
                     self._cmd_hist_idx = max(0, self._cmd_hist_idx - 1)
-                cmd.value = self._cmd_history[self._cmd_hist_idx]
-                cmd.cursor_position = len(cmd.value)
+                self._set_cmd_value(self._cmd_history[self._cmd_hist_idx])
             event.stop()
             return
         if event.key == "down":
+            if self._suggest_items:
+                self._move_suggestion(1)
+                event.stop()
+                return
             if self._cmd_hist_idx is not None:
                 self._cmd_hist_idx += 1
                 if self._cmd_hist_idx < len(self._cmd_history):
-                    cmd.value = self._cmd_history[self._cmd_hist_idx]
+                    self._set_cmd_value(self._cmd_history[self._cmd_hist_idx])
                 else:
                     self._cmd_hist_idx = None
-                    cmd.value = ""
-                cmd.cursor_position = len(cmd.value)
+                    self._set_cmd_value("")
             event.stop()
             return
 
@@ -975,6 +1299,102 @@ class NixUI(App):
 
     def _log(self) -> RichLog:
         return self.query_one("#log", RichLog)
+
+    def _suggest_box(self) -> Label:
+        return self.query_one("#suggest", Label)
+
+    def _suggest_query(self, value: str) -> str:
+        return value.strip().split()[0] if value.strip() else ""
+
+    def _suggest_matches(self, value: str) -> list[tuple[str, str, str]]:
+        cfg = self.nix.config
+        if not cfg.autocomplete_enabled:
+            return []
+        query = self._suggest_query(value)
+        if len(query) < cfg.autocomplete_min_chars:
+            return []
+        needle = query.casefold() if cfg.autocomplete_case_insensitive else query
+        matches: list[tuple[str, str, str]] = []
+        for name, cmd in get_all_commands().items():
+            hay = name.casefold() if cfg.autocomplete_case_insensitive else name
+            if not hay.startswith(needle):
+                continue
+            detail = cmd.description or cmd.usage
+            if not cfg.autocomplete_show_descriptions:
+                detail = cmd.usage if cmd.usage != name else ""
+            matches.append((name, cmd.usage or name, detail))
+        return matches[: cfg.autocomplete_max_items]
+
+    def _update_suggestions(self, value: str) -> None:
+        self._suggest_items = self._suggest_matches(value)
+        self._suggest_idx = 0
+        self._render_suggestions()
+
+    def _render_suggestions(self) -> None:
+        try:
+            box = self._suggest_box()
+        except Exception:
+            return
+        if not self._suggest_items:
+            box.remove_class("visible")
+            box.update(Text())
+            return
+        width = max(24, (self.size.width or 80) - 8)
+        rendered = Text()
+        for idx, (name, usage, detail) in enumerate(self._suggest_items):
+            selected = idx == self._suggest_idx
+            head = "\u25b8 " if selected else "  "
+            line = Text()
+            line.append(head, style=f"bold {BLUE}" if selected else DIM)
+            line.append(name, style=f"bold {CYAN}" if selected else FG)
+            if usage and usage != name:
+                line.append("  ", style=DIM)
+                line.append(_clip(usage, 40), style=DIM)
+            if detail:
+                line.append("  \u00b7 ", style=DIM)
+                line.append(_clip(detail, 60), style=DIM)
+            if selected:
+                line.stylize(f"on {RAISED}")
+            line.truncate(width, overflow="ellipsis")
+            rendered.append(line)
+            rendered.append("\n")
+        rendered.rstrip()
+        box.add_class("visible")
+        box.update(rendered)
+
+    def _set_cmd_value(self, value: str) -> None:
+        """Assign the input value without letting it trigger suggestions."""
+        self._suggest_applied = value or None
+        self._clear_suggestions()
+        cmd = self.query_one("#cmd", Input)
+        cmd.value = value
+        cmd.cursor_position = len(value)
+
+    def _move_suggestion(self, delta: int) -> None:
+        if not self._suggest_items:
+            return
+        count = len(self._suggest_items)
+        self._suggest_idx = max(0, min(self._suggest_idx + delta, count - 1))
+        self._render_suggestions()
+
+    def _apply_suggestion(self) -> None:
+        if not self._suggest_items:
+            return
+        name = self._suggest_items[self._suggest_idx][0]
+        self._set_cmd_value(name)
+        self._clear_suggestions()
+        self._suggest_applied = name
+        self.query_one("#cmd", Input).focus()
+
+    def _clear_suggestions(self) -> None:
+        self._suggest_items = []
+        self._suggest_idx = 0
+        try:
+            box = self._suggest_box()
+        except Exception:
+            return
+        box.remove_class("visible")
+        box.update(Text())
 
     def _focus_cmd(self) -> None:
         try:
@@ -1034,8 +1454,10 @@ class NixUI(App):
         self.notify(_t(lang, "welcome_back", name=result["name"]),
                     severity="information")
         self._write_session_start()
+        self._apply_pet_visibility()
         self._refresh_pet()
         self.query_one("#cmd", Input).focus()
+        self._auto_scan_if_enabled()
 
     def _celebrate(self) -> None:
         self._celebrate_until = time.monotonic() + 2.0
@@ -1068,7 +1490,11 @@ class NixUI(App):
         pattern_label = self._t(f"pet.pattern.{pattern}")
         blink = animate and self._blink == 1
         look = idle_look(f"{self.nix.root}:{pet.get('name', 'pet')}")
-        art = render_avatar(pet, self.nix.root, scale=1, blink=blink, look=look)
+        if getattr(self.nix.config, "avatar_enabled", True):
+            art = render_avatar(pet, self.nix.root, scale=1, blink=blink,
+                                look=look)
+        else:
+            art = Text(self._t("pet.avatar_off"), style=DIM)
         name = pet.get("name", "???")
         mood = pet.get("mood", "curious")
         mood_style = MOOD_STYLES.get(mood, FG)
@@ -1109,6 +1535,77 @@ class NixUI(App):
             DIM,
         )
         box.update(art)
+
+    def _apply_pet_visibility(self) -> None:
+        """Show or hide the pet panels, honouring ``tamagotchi_enabled``."""
+        visible = bool(getattr(self.nix.config, "tamagotchi_enabled", True))
+        for query in ("#pet-wrap", "#pet-stats", "#top-pet-name"):
+            try:
+                self.query_one(query).display = visible
+            except Exception:
+                pass
+
+    def _apply_runtime_settings(self) -> None:
+        """Push every live-applicable config field into the running widgets."""
+        self._apply_clock()
+        self._apply_log_limits()
+        self._apply_timer()
+        self._apply_history_limit()
+
+    def _apply_clock(self) -> None:
+        try:
+            self.query_one(NixHeader).set_clock_visible(
+                bool(self.nix.config.show_clock))
+        except Exception:
+            pass
+
+    def _apply_log_limits(self) -> None:
+        try:
+            self._log().max_lines = int(self.nix.config.log_max_lines)
+        except Exception:
+            pass
+
+    def _apply_timer(self) -> None:
+        """Restart the animation timer with the configured interval."""
+        interval = float(self.nix.config.animation_interval)
+        if self._anim_timer is not None:
+            try:
+                self._anim_timer.stop()
+            except Exception:
+                pass
+            self._anim_timer = None
+        self._anim_timer = self.set_interval(interval, self._tick)
+
+    def _apply_history_limit(self) -> None:
+        """Trim the command history to ``command_history_size`` (0 clears)."""
+        limit = int(self.nix.config.command_history_size)
+        if limit <= 0:
+            self._cmd_history.clear()
+        elif len(self._cmd_history) > limit:
+            del self._cmd_history[:-limit]
+        self._cmd_hist_idx = None
+
+    def _auto_scan_if_enabled(self) -> None:
+        """Run one silent project scan per session when enabled."""
+        if self._auto_scan_done:
+            return
+        if not getattr(self.nix.config, "auto_scan", True):
+            return
+        self._auto_scan_done = True
+        try:
+            info = scan_project(Path(self.nix.root))
+        except Exception:
+            return
+        self._log().write(
+            Text()
+            .append(_timestamp() + " ", style=DIM)
+            .append("SYSTEM ", style=BLUE)
+            .append(
+                self._t("sys.auto_scan", files=info.source_files,
+                        lines=info.total_lines),
+                style=FG,
+            )
+        )
 
     def _energy_bar(self, energy: int) -> str:
         filled = round(energy / 100 * 10)
@@ -1243,8 +1740,11 @@ class NixUI(App):
         mood_style = MOOD_STYLES.get(mood, FG)
         pattern = pet.get("body_pattern", "seed")
         look = idle_look(f"{self.nix.root}:{pet.get('name', 'pet')}")
-        art = render_avatar(pet, self.nix.root, scale=2,
-                            blink=self._blink == 1, look=look)
+        if getattr(self.nix.config, "avatar_enabled", True):
+            art = render_avatar(pet, self.nix.root, scale=2,
+                                blink=self._blink == 1, look=look)
+        else:
+            art = Text(t("pet.avatar_off"), style=DIM)
         rows = [
             (t("pet.name"), pet.get("name", "???"), FG),
             (t("pet.skin"), self._skin_name(pet), PURPLE),

@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -154,6 +155,21 @@ class Git:
 
     def add_all(self) -> GitResult:
         return self._run("add", "-A")
+
+    def add_file(self, path) -> GitResult:
+        """Stage exactly one path.
+
+        Unlike ``add_all`` this never sweeps unrelated working-tree
+        changes (``.nix/`` state, user edits) into the index.
+        """
+        target = Path(path)
+        if not target.is_absolute():
+            target = self.root / target
+        try:
+            rel = target.resolve().relative_to(Path(self.root).resolve())
+        except ValueError:
+            return GitResult(ok=False, stderr=f"outside repo: {path}")
+        return self._run("add", "--", str(rel))
 
     def commit(self, message: str) -> GitResult:
         return self._run("commit", "-m", message)

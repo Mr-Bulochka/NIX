@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .state import utc_now_iso
@@ -100,6 +101,55 @@ class MutationEngine:
                 self.app.mutations.reset_budget()
             except Exception:
                 pass
+        self._auto_commit(kind, target)
+
+    def _auto_commit(self, kind: str, target) -> None:
+        """Commit the mutated file when ``git_auto_commit`` is enabled.
+
+        Only the mutated file is staged, so NIX state (``.nix/``) and
+        unrelated working-tree changes are never swept into the commit.
+        A non-git root is a silent no-op recorded in the journal.
+        """
+        if not getattr(self.app.config, "git_auto_commit", False):
+            return
+        from .git import Git
+
+        root = Path(self.app.root)
+        git = Git(root)
+        if not git.is_repo():
+            self._note(f"auto-commit skipped (not a git repo): {target}")
+            return
+        path = Path(target)
+        if not path.is_absolute():
+            path = root / path
+        if not path.is_file():
+            self._note(f"auto-commit skipped (missing file): {target}")
+            return
+        staged = git.add_file(path)
+        if not staged.ok:
+            self._note(f"auto-commit failed to stage {target}: "
+                       f"{staged.stderr.strip()}")
+            return
+        rel = self._relative(path, root)
+        message = f"nix: {kind} {rel}"
+        result = git.commit(message)
+        if result.ok:
+            self._note(f"auto-commit: {message}")
+        else:
+            self._note(f"auto-commit failed for {rel}: "
+                       f"{result.stderr.strip()}")
+
+    def _relative(self, path: Path, root: Path) -> str:
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except (ValueError, OSError):
+            return str(path).replace("\\", "/")
+
+    def _note(self, text: str) -> None:
+        try:
+            self.app.journal.write("GIT", text)
+        except Exception:
+            pass
 
     def reset_budget(self) -> None:
         data = self._load()
