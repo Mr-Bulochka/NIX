@@ -398,7 +398,7 @@ apart, so bump all three together.
 
 1. Update the version in `VERSION`, `pyproject.toml` and `nix/__init__.py`
 2. Add the release entry to `CHANGELOG.md`
-3. Commit, then tag the commit with `v<version>` (e.g. `v0.3.10`) and push the tag
+3. Commit, then tag the commit with `v<version>` (e.g. `v0.3.11`) and push the tag
 
 Pushing the tag runs `.github/workflows/release.yml`, which verifies the tag
 matches the project version, runs the tests, builds the sdist and wheel,
@@ -441,8 +441,8 @@ at it (refusing to guess when none does), builds from it, and uploads with
 `skip-existing: true` — so it can never overwrite a file that is already
 published. Each ref is independent, so run it once per affected version.
 
-All versions from `0.3.0` through `0.3.10` are currently present on PyPI, so
-there is nothing outstanding to backfill.
+Every version listed in `CHANGELOG.md` from `0.3.0` onwards is present on PyPI,
+so there is nothing outstanding to backfill.
 
 ## License
 

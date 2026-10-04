@@ -5,7 +5,7 @@ All notable changes to NIX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.11] - 2026-10-04
 
 ### Fixed
 - `help` and `which` now show the localized usage line. Previously both read
@@ -213,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Release packaging with bundled modules in the wheel.
 - MIT-0 license (no attribution required).
 
-[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.7...v0.3.8
