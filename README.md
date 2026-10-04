@@ -105,8 +105,8 @@ python3 -m nix
 NIX is pure Python (3.11+) with two cross-platform dependencies
 (`rich`, `textual`) — the same code runs on Windows, Linux and macOS.
 The `nix` console command is created by the package entry point and works
-everywhere; `nix.bat` in the repo root is just a Windows convenience
-launcher equivalent to `python -m nix`.
+everywhere; see [Command line](#command-line) for the exact invocation forms
+and for what `nix.bat` in the repo root does.
 
 ## Quick Start
 
@@ -116,6 +116,47 @@ nix                    # or: python -m nix
 ```
 
 On first launch, NIX creates a `.nix/` directory and asks for your pet's name.
+
+### Command line
+
+```
+usage: nix [--version|--help]
+       nix daemon [--socket host:port] [--once 'command']
+```
+
+| Form | Effect |
+|------|--------|
+| `nix --version`, `nix -V` | Print `NIX <version>` and exit |
+| `nix --help`, `nix -h` | Print the two usage lines above and exit |
+| `nix` | Start the TUI in the current directory |
+| `python -m nix` | Same as `nix`, for environments without the console script |
+| `nix daemon --once '<command>'` | Run one command non-interactively and print a JSON envelope |
+| `nix daemon --socket host:port` | Serve the JSON protocol over TCP |
+
+`--version`, `--help` and `-V`/`-h` are handled before any other argument. For
+`daemon`, `--once` and `--socket` are mutually exclusive, each requires exactly
+one argument, and any other argument is rejected with a usage error.
+
+On Windows the console script and `python -m nix` both work as-is. The bundled
+`nix.bat` is a development launcher for a git clone only: it runs the repo's
+`.venv\Scripts\python.exe -m nix` and falls back to `python -m nix`, preferring
+the local checkout over an installed console script.
+
+### Configuration and `NIX_HOME`
+
+NIX keeps its per-project state in `.nix/` inside the working directory and its
+user-level modules in `~/.nix/modules`.
+
+Set `NIX_HOME` to relocate the user-level home. It replaces the home directory
+that NIX resolves, so user modules are then read from `$NIX_HOME/.nix/modules`:
+
+```bash
+NIX_HOME=/opt/nix-home nix
+```
+
+A user module shadows the bundled module with the same id. This is separate
+from the project's own `.nix/` directory, which always lives next to the code
+being tested.
 
 ## The Interface
 
@@ -138,15 +179,15 @@ several commands in a single line with `;` or `&&`.
 | `which <cmd>` | Show info about a command |
 | `status` | Current project and NIX state |
 | `stats [--top N]` | Full project analytics |
-| `scan [--tree] [--depth N]` | Read-only project inventory |
+| `scan [--tree] [--depth N] [--top N]` | Read-only project inventory |
 | `tree [--depth N]` | Show project tree |
 | `ls [path] [--all] [--size]` | List a directory |
 | `lang [--top N]` | Detect languages in the project |
 | `tests [--max N] [--count]` | Find test files and functions |
 | `run [--timeout N]` | Run all tests |
 | `deps [--top N]` | Collect imported modules |
-| `find <name> [--ext py,js]` | Search files by name |
-| `todo [--max N]` | Scan code for TODO/FIXME |
+| `find <name> [--ext py,js] [--max N]` | Search files by name |
+| `todo [--max N]` | Scan code for TODO/FIXME/XXX |
 | `attempts [N\|+N\|-N]` | Show/set attempt budget |
 | `mode [local\|safe\|git]` | Show/set safety mode |
 | `save` | Persist config and pet |
@@ -159,7 +200,7 @@ several commands in a single line with `;` or `&&`.
 | `journal <text>` | Write a journal entry |
 | `logs [N]` | Show session log |
 | `history [N]` | Show journal history |
-| `checkpoint [name]` | List or create checkpoints |
+| `checkpoint [create\|list\|info\|promote\|restore\|delete] [name] [--force] [--dry]` | Checkpoints: bare = list, `checkpoint <name>` = create, plus `create`/`info`/`promote`/`delete` and `restore <name>` (`--force` overwrites, `--dry` previews) |
 | `echo <text>` | Print text to the log |
 | `time` | Show current UTC time |
 | `pwd` | Show current working directory |
@@ -173,7 +214,8 @@ NIX understands code through **code modules** (language modules) —
 plain-data packs (no code) that describe how blocks, operations and
 generation work in a given language. Bundled modules live in
 `nix/modules/bundled/`; user modules are picked up from
-`~/.nix/modules/<id>/` and shadow bundled ones.
+`~/.nix/modules/<id>/` (or `~/.nix/modules/lang-<id>/<id>/`) and shadow bundled
+ones with the same id.
 
 | Command | Description |
 |---------|-------------|
@@ -181,9 +223,9 @@ generation work in a given language. Bundled modules live in
 | `defs [--max N] [glob]` | List project functions/classes (from the project index) |
 | `blocks <file> <line>` | Show the block enclosing a line |
 | `wrap <file> <line> in <op> [--slot v] [--apply]` | Wrap a block in a language op (dry-run unless `--apply`) |
-| `gen <type> <name> [--into f] [--at N] [--apply] [--params .. --ret .. --doc .. --body ..]` | Generate code from a template (preview unless `--into`; `--apply` writes into it or creates a new file) |
-| `make <entity> [--cols name:str:pk,...] [--into f] [--test-into f] [--apply]` | Scaffold a model + CRUD + tests from column specs (dry-run unless `--apply`; language inferred from `--into` extension or `--lang`, an unsupported hint is an error) |
-| `testgen <file\|all> [--into f] [--apply]` | Generate test stubs from the project index (dry-run unless `--apply`) |
+| `gen <type> <name> [--into f] [--at N\|end] [--after] [--apply] [--params .. --ret .. --doc .. --body ..] [--lang python]` | Generate code from a template (preview unless `--into`; `--apply` writes into it or creates a new file). With `--at N` the snippet is inserted before line `N`, or after it with `--after`; `--at end` places it before a trailing `if __name__ == "__main__":` guard (or appends at the end when there is none). The snippet is re-indented to match the anchor line |
+| `make <entity> [--cols name:str:pk,...] [--into f] [--test-into f] [--apply] [--lang python]` | Scaffold a model + CRUD + tests from column specs (dry-run unless `--apply`; language inferred from `--into` extension or `--lang`, an unsupported hint is an error) |
+| `testgen <file\|all> [--into f] [--apply] [--lang python]` | Generate test stubs from the project index (dry-run unless `--apply`) |
 | `recipe [list\|<name>] [--apply] [args...]` | Run named command chains; built-ins: `feature`, `scaffold`, `test`; user recipes live in `.nix/recipes.json` (`{0}`, `{1}`, ... are positional args; re-run with `--apply` to write) |
 | `rename <old> <new> [--file f] [--apply]` | Project-wide symbolic rename (dry-run unless `--apply`) |
 | `ident` | Show the project's identity patterns (naming, docstrings, ...) |
@@ -356,7 +398,7 @@ apart, so bump all three together.
 
 1. Update the version in `VERSION`, `pyproject.toml` and `nix/__init__.py`
 2. Add the release entry to `CHANGELOG.md`
-3. Commit, then tag the commit with `v<version>` (e.g. `v0.3.9`) and push the tag
+3. Commit, then tag the commit with `v<version>` (e.g. `v0.3.10`) and push the tag
 
 Pushing the tag runs `.github/workflows/release.yml`, which verifies the tag
 matches the project version, runs the tests, builds the sdist and wheel,
@@ -388,25 +430,19 @@ uv run --group dev twine check dist/*
 The wheel embeds all bundled language modules, so a plain
 `pip install dist/cli_nix-<version>-py3-none-any.whl` gives a working install.
 
-### Backfilling an unpublished version
+### Recovering a failed or missing release
 
-Versions `0.3.2`–`0.3.8` were released on GitHub but never uploaded to PyPI.
-To publish one, go to **Actions → Release → Run workflow** and set
-`backfill_ref` to a tag or a commit SHA:
+If a tag was pushed but its upload to PyPI or GitHub Releases failed, you can
+re-run that release from its existing tag: go to **Actions → Release → Run
+workflow** and set `backfill_ref` to a tag (e.g. `v0.3.9`) or a commit SHA.
 
-| Version | `backfill_ref` |
-|---------|----------------|
-| 0.3.2 | `c4d7975` |
-| 0.3.3 | `6eb9d44` |
-| 0.3.4 | `f471f3d` |
-| 0.3.5 | `v0.3.5` |
-| 0.3.6 | `v0.3.6` |
-| 0.3.7 | `v0.3.7` |
-| 0.3.8 | `v0.3.8` |
+The backfill job checks out the historical ref, verifies that a `v*` tag points
+at it (refusing to guess when none does), builds from it, and uploads with
+`skip-existing: true` — so it can never overwrite a file that is already
+published. Each ref is independent, so run it once per affected version.
 
-The backfill job checks out the historical ref, builds from it, and uploads
-with `skip-existing: true` — so it can never overwrite a file that is already
-on PyPI. Each ref is independent, so run it once per version.
+All versions from `0.3.0` through `0.3.10` are currently present on PyPI, so
+there is nothing outstanding to backfill.
 
 ## License
 

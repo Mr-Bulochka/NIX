@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `help` and `which` now show the localized usage line. Previously both read
+  `Command.usage` straight from the registry, so every `cmd.<name>.usage`
+  override in `nix/i18n.py` was dead code and `help <command>` printed the
+  English registry text even with `lang ru`.
+- `nix help` now lists all 47 registered commands. `laws` and `mutations` were
+  missing from the group table, hiding the world-law and mutation surfaces.
+- The registry usage strings for `make`, `testgen` and `checkpoint` now advertise
+  the flags the handlers already accepted: `--test-into`, `--lang`, and
+  `restore --force` / `--dry`.
+
+### Changed
+- Help groups are declared once in `HELP_GROUP_NAMES` so the help table and the
+  tests read from the same source.
+
+### Documentation
+- README: new `Command line` section with the exact `nix [--version|--help]` /
+  `nix daemon [--socket ...] [--once ...]` forms, and a new `Configuration and
+  NIX_HOME` section.
+- README: corrected `scan --top`, `find --max`, `todo` (`XXX` too), the
+  `checkpoint` subcommands, and the `gen --at` / `--after` / `--at end`
+  semantics, which documented the trailing `if __name__ == "__main__":` guard
+  backwards.
+- README: `nix.bat` is now described as a git-clone development launcher rather
+  than a plain alias for `python -m nix`.
+- README: replaced the stale backfill table for `0.3.2`–`0.3.8` with the actual
+  recovery flow, and noted that `0.3.0`–`0.3.10` are all on PyPI.
+
 ## [0.3.10] - 2026-10-01
 
 ### Fixed
@@ -185,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Release packaging with bundled modules in the wheel.
 - MIT-0 license (no attribution required).
 
-[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.10...HEAD
+[0.3.10]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/Mr-Bulochka/NIX/compare/v0.3.6...v0.3.7

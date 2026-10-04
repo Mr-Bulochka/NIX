@@ -197,6 +197,36 @@ def _notes_path(app: "NixApp") -> Path:
 # ---- help ----------------------------------------------------------
 
 
+def _usage(app: "NixApp", cmd: Command) -> str:
+    """Localized usage line for ``cmd``, falling back to the registry text.
+
+    ``i18n.t`` echoes the key back when a key is missing, so the translation
+    table is consulted directly instead of going through ``app.t``.
+    """
+    from .i18n import DEFAULT_LANGUAGE, TRANSLATIONS
+    lang = getattr(app.config, "language", DEFAULT_LANGUAGE)
+    table = TRANSLATIONS.get(lang) or TRANSLATIONS[DEFAULT_LANGUAGE]
+    return table.get(f"cmd.{cmd.name}.usage") or cmd.usage or cmd.name
+
+
+HELP_GROUP_NAMES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("help.grp.core",
+     ("help", "version", "pwd", "time", "echo", "which")),
+    ("help.grp.project",
+     ("scan", "status", "stats", "tree", "ls", "lang", "tests", "run",
+      "deps", "find", "todo")),
+    ("help.grp.code",
+     ("module", "defs", "blocks", "wrap", "gen", "rename", "ident",
+      "make", "testgen", "recipe", "laws")),
+    ("help.grp.pet", ("pet", "pill", "settings", "tag")),
+    ("help.grp.memory", ("note", "memory", "journal")),
+    ("help.grp.safety", ("mode", "attempts", "save", "destruct", "mutations")),
+    ("help.grp.git", ("git", "remote")),
+    ("help.grp.system",
+     ("logs", "history", "checkpoint", "clear", "quit")),
+)
+
+
 @register("help", "show help", "help [command]")
 def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
     flags, rest = parse_flags(args)
@@ -207,35 +237,20 @@ def cmd_help(app: "NixApp", args: list[str]) -> CommandResult:
             app.ui.show_message("ERROR", app.t("fb.unknown", name=name))
             return CommandResult()
         app.ui.show_block(app.t("tbl.command"), [
-            (cmd.usage, app.t(f"cmd.{cmd.name}.desc") or "", GREEN),
+            (_usage(app, cmd), app.t(f"cmd.{cmd.name}.desc") or "", GREEN),
         ])
         return CommandResult()
 
     groups = []
-    for title, names in (
-        (app.t("help.grp.core"), ["help", "version", "pwd", "time", "echo", "which"]),
-        (app.t("help.grp.project"),
-         ["scan", "status", "stats", "tree", "ls", "lang", "tests", "run",
-          "deps", "find", "todo"]),
-         (app.t("help.grp.code"),
-          ["module", "defs", "blocks", "wrap", "gen", "rename", "ident",
-           "make", "testgen", "recipe"]),
-        (app.t("help.grp.pet"), ["pet", "pill", "settings", "tag"]),
-        (app.t("help.grp.memory"), ["note", "memory", "journal"]),
-        (app.t("help.grp.safety"), ["mode", "attempts", "save", "destruct"]),
-        (app.t("help.grp.git"), ["git", "remote"]),
-        (app.t("help.grp.system"), ["logs", "history", "checkpoint",
-                                    "clear", "quit"]),
-    ):
+    for title_key, names in HELP_GROUP_NAMES:
         items = []
         for name in names:
             cmd = get_command(name)
             if cmd is None:
                 continue
-            usage = cmd.usage or name
-            items.append((usage, app.t(f"cmd.{name}.desc")))
+            items.append((_usage(app, cmd), app.t(f"cmd.{name}.desc")))
         if items:
-            groups.append((title, items))
+            groups.append((app.t(title_key), items))
     app.ui.show_help(groups)
     return CommandResult()
 
@@ -250,7 +265,7 @@ def cmd_which(app: "NixApp", args: list[str]) -> CommandResult:
         return CommandResult()
     desc = app.t(f"cmd.{name}.desc") or cmd.description
     app.ui.show_block(app.t("tbl.command"), [
-        (cmd.usage, desc, GREEN),
+        (_usage(app, cmd), desc, GREEN),
     ])
     return CommandResult()
 
@@ -733,7 +748,8 @@ def cmd_save(app: "NixApp", args: list[str]) -> CommandResult:
 
 
 @register("checkpoint", "create, list, inspect, promote, restore or delete checkpoints",
-          "checkpoint [create|list|info|promote|restore|delete] [name]")
+          "checkpoint [create|list|info|promote|restore|delete] [name] "
+          "[--force] [--dry]")
 def cmd_checkpoint(app: "NixApp", args: list[str]) -> CommandResult:
     flags, rest = parse_flags(args)
     if not rest:
@@ -1604,7 +1620,8 @@ def cmd_ident(app: "NixApp", args: list[str]) -> CommandResult:
 
 
 @register("make", "scaffold a feature: model + CRUD + tests",
-          "make <entity> [--cols name:str:pk,age:int] [--into file] [--apply]")
+          "make <entity> [--cols name:str:pk,age:int] [--into file] "
+          "[--test-into file] [--apply] [--lang python]")
 def cmd_make(app: "NixApp", args: list[str]) -> CommandResult:
     from .scaffold import parse_columns, render_scaffold
     from .modules.loader import module_for_file, all_modules
@@ -1731,7 +1748,7 @@ def _write_feature(app: "NixApp", filepath: str, content: str,
 
 
 @register("testgen", "generate test stubs from brain index",
-          "testgen <file|all> [--into path] [--apply]")
+          "testgen <file|all> [--into path] [--apply] [--lang python]")
 def cmd_testgen(app: "NixApp", args: list[str]) -> CommandResult:
     from .scaffold import render_testgen
     from .modules.loader import all_modules
