@@ -5,9 +5,13 @@ All notable changes to NIX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0b1] - 2026-10-07
+## [0.4.0] - 2026-10-07
 
-First pre-release of the 0.4 line. Found by running NIX's own mutation
+The project moves from Alpha to Beta. Published as a plain version so that a
+plain `pip install cli-nix` resolves to it: pip ignores pre-releases by default,
+so shipping `0.4.0b1` would have left every reader on 0.3.11.
+
+Found by running NIX's own mutation
 testing (`nix destruct`) against the NIX codebase and by a headless smoke pass
 over all 47 commands.
 

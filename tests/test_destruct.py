@@ -273,11 +273,28 @@ class TestInterruptRestoresSources(unittest.TestCase):
             encoding="utf-8")
         return root
 
-    def test_keyboard_interrupt_restores_original_text(self):
-        root = self._project()
+    def _app_in(self, root):
+        """Build a NixApp rooted at *root*.
+
+        `NixApp()` resolves state from `Path.cwd()`, so without chdir-ing the
+        app would read the mutation budget of whatever repository the tests
+        happen to run in. Once a real `nix destruct` run has exhausted that
+        budget every candidate is blocked by `mutation_budget` and these tests
+        pass vacuously in CI (clean checkout, no `.nix/`) but fail on a
+        developer machine.
+        """
+        from nix.app import NixApp
+        old = os.getcwd()
+        os.chdir(root)
+        self.addCleanup(os.chdir, old)
         app = NixApp()
         app.root = root
         app.config.checkpoint_on_mutate = False
+        return app
+
+    def test_keyboard_interrupt_restores_original_text(self):
+        root = self._project()
+        app = self._app_in(root)
         original = (root / "sample.py").read_text(encoding="utf-8")
 
         calls = {"n": 0}
@@ -297,9 +314,7 @@ class TestInterruptRestoresSources(unittest.TestCase):
 
     def test_arbitrary_exception_restores_original_text(self):
         root = self._project()
-        app = NixApp()
-        app.root = root
-        app.config.checkpoint_on_mutate = False
+        app = self._app_in(root)
         original = (root / "sample.py").read_text(encoding="utf-8")
 
         calls = {"n": 0}
@@ -319,9 +334,7 @@ class TestInterruptRestoresSources(unittest.TestCase):
 
     def test_keep_still_leaves_mutations_in_place(self):
         root = self._project()
-        app = NixApp()
-        app.root = root
-        app.config.checkpoint_on_mutate = False
+        app = self._app_in(root)
         original = (root / "sample.py").read_text(encoding="utf-8")
 
         def fake_run_tests(_root, timeout=None):

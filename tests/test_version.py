@@ -13,7 +13,7 @@ import nix
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[ab]|rc)\d*$")
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _read_version_file() -> str:
@@ -41,15 +41,13 @@ class TestVersionConsistency(unittest.TestCase):
         self.assertEqual(nix.__version__, _read_version_file())
         self.assertEqual(nix.__version__, _read_pyproject_version())
 
-    def test_pre_release_suffix_is_pep440_shaped(self):
-        # `0.4.0b1` is a PEP 440 pre-release of 0.4.0. A plain `0.4.0` would
-        # claim the final release exists, and `0.4.0-beta1` is not valid PEP 440
-        # at all, so packaging would reject it.
+    def test_shipped_version_is_a_stable_release(self):
+        # Published builds must be plain releases so that a plain
+        # `pip install cli-nix` resolves to them. pip ignores pre-releases by
+        # default, so shipping 0.4.0b1 would leave every reader on the older
+        # 0.3.11 unless they knew to add --pre.
         version = nix.__version__
-        if re.match(r"^\d+\.\d+\.\d+$", version):
-            self.skipTest("final release")
-        match = re.match(r"^(\d+\.\d+)\.0((?:a|b|rc)\d+)$", version)
-        self.assertIsNotNone(match, f"{version} is not a PEP 440 pre-release")
-        base, suffix = match.groups()
-        self.assertEqual(base, "0.4", "beta line is 0.4.x")
-        self.assertTrue(suffix.startswith(("a", "b", "rc")))
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$",
+                         f"{version} is not a plain stable version")
+        self.assertEqual(version, _read_version_file())
+        self.assertEqual(version, _read_pyproject_version())
