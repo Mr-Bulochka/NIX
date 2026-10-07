@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.cells import cell_len, set_cell_size
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -25,7 +26,7 @@ from textual.widgets._header import (
 from .avatar import (genes_for as avatar_genes_for, render as render_avatar,
                        idle_look)
 from .avatar import VARIANT_KINDS
-from .commands import get_all_commands
+from .commands import _usage, get_all_commands
 from .config import DEFAULT_PROTECTED_PATHS, parse_path_list
 from .scanner import scan_project
 from .i18n import LANGUAGES, t as _t
@@ -58,9 +59,36 @@ SPINNER = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
 
 def _clip(text: str, limit: int = 400) -> str:
     text = " ".join(str(text).split())
-    if len(text) <= limit:
+    if cell_len(text) <= limit:
         return text
-    return text[: limit - 1].rstrip() + "\u2026"
+    return set_cell_size(text, limit - 1).rstrip() + "\u2026"
+
+
+def _ljust(text: str, width: int) -> str:
+    """Left-justify by *visible cell width*, not by character count.
+
+    Cyrillic and CJK glyphs occupy a different number of terminal cells than
+    Python counts characters, so ``str.ljust`` misaligns any localized column.
+    Overlong values are truncated with an ellipsis instead of pushing the next
+    column off the edge.
+    """
+    text = str(text)
+    text_w = cell_len(text)
+    if text_w <= width:
+        return text + " " * (width - text_w)
+    return set_cell_size(text, width - 1).rstrip() + "\u2026"
+
+
+def _head(text: str) -> str:
+    """Uppercase a heading without widening non-ASCII text.
+
+    ``str.upper()`` expands some Cyrillic sequences (e.g. ``'ß' -> 'SS'``), which
+    silently breaks the fixed-width header columns. Fall back to the original
+    string when uppercasing grows the text.
+    """
+    text = str(text)
+    upper = text.upper()
+    return upper if cell_len(upper) <= cell_len(text) else text
 
 
 MOOD_STYLES = {
@@ -1314,17 +1342,34 @@ class NixUI(App):
         query = self._suggest_query(value)
         if len(query) < cfg.autocomplete_min_chars:
             return []
-        needle = query.casefold() if cfg.autocomplete_case_insensitive else query
-        matches: list[tuple[str, str, str]] = []
+        fold = cfg.autocomplete_case_insensitive
+        needle = query.casefold() if fold else query
+        scored: list[tuple[tuple[int, int], str, str, str]] = []
         for name, cmd in get_all_commands().items():
-            hay = name.casefold() if cfg.autocomplete_case_insensitive else name
-            if not hay.startswith(needle):
-                continue
-            detail = cmd.description or cmd.usage
+            hay = name.casefold() if fold else name
+            # `_usage` already resolves the localized usage line and falls back
+            # to the registry text; going through `self._t` here would echo a
+            # raw `cmd.<name>.usage` key for the commands that have no override.
+            usage = _usage(self.nix, cmd)
+            detail = self._t(f"cmd.{name}.desc") or cmd.description or cmd.usage
             if not cfg.autocomplete_show_descriptions:
-                detail = cmd.usage if cmd.usage != name else ""
-            matches.append((name, cmd.usage or name, detail))
-        return matches[: cfg.autocomplete_max_items]
+                detail = usage if usage != name else ""
+            detail_hay = detail.casefold() if fold else detail
+            # Rank: name prefix beats name substring, which beats a match in the
+            # usage or the localized description.
+            if hay.startswith(needle):
+                rank = (0, 0)
+            elif needle in hay:
+                rank = (1, hay.find(needle))
+            elif needle in usage.casefold():
+                rank = (2, 0)
+            elif needle in detail_hay:
+                rank = (3, detail_hay.find(needle))
+            else:
+                continue
+            scored.append((rank, name, usage, detail))
+        scored.sort(key=lambda item: item[0])
+        return [(n, u, d) for _rank, n, u, d in scored[: cfg.autocomplete_max_items]]
 
     def _update_suggestions(self, value: str) -> None:
         self._suggest_items = self._suggest_matches(value)
@@ -1341,6 +1386,8 @@ class NixUI(App):
             box.update(Text())
             return
         width = max(24, (self.size.width or 80) - 8)
+        usage_room = max(12, min(40, width // 2))
+        detail_room = max(16, width - usage_room - 10)
         rendered = Text()
         for idx, (name, usage, detail) in enumerate(self._suggest_items):
             selected = idx == self._suggest_idx
@@ -1348,12 +1395,15 @@ class NixUI(App):
             line = Text()
             line.append(head, style=f"bold {BLUE}" if selected else DIM)
             line.append(name, style=f"bold {CYAN}" if selected else FG)
+            # Give the remaining cells to the description, so a long localized
+            # usage string never squeezes it out entirely.
             if usage and usage != name:
+                room = max(12, detail_room - 6)
                 line.append("  ", style=DIM)
-                line.append(_clip(usage, 40), style=DIM)
+                line.append(_clip(usage, room), style=DIM)
             if detail:
                 line.append("  \u00b7 ", style=DIM)
-                line.append(_clip(detail, 60), style=DIM)
+                line.append(_clip(detail, detail_room), style=DIM)
             if selected:
                 line.stylize(f"on {RAISED}")
             line.truncate(width, overflow="ellipsis")
@@ -1407,13 +1457,18 @@ class NixUI(App):
         return self.nix.config.t(key, **kw)
 
     def _apply_language(self) -> None:
-        cfg = self.nix.config
         self.query_one("#btn-scan", Button).label = f"2 {self._t('btn.scan')}"
         self.query_one("#btn-status", Button).label = f"3 {self._t('btn.status')}"
         self.query_one("#btn-pet", Button).label = f"1 {self._t('btn.pet')}"
         self.query_one("#btn-settings", Button).label = f"4 {self._t('btn.settings')}"
         self.query_one("#btn-quit", Button).label = f"7 {self._t('btn.quit')}"
         self.query_one("#cmd", Input).placeholder = self._t("cmd.placeholder")
+        # The pet panel, the suggest box and the header are built from
+        # translations too, so they have to be rebuilt when the language
+        # changes -- otherwise they keep rendering the previous language until
+        # the next restart.
+        self._refresh_pet()
+        self._render_suggestions()
         self._refresh_header()
 
     def _refresh_header(self) -> None:
@@ -1421,7 +1476,7 @@ class NixUI(App):
         name = self.nix.root.name or str(self.nix.root)
         mode = cfg.t(f"cmd.mode.{cfg.mode}")
         self.title = "NIX"
-        self.sub_title = f"{name}  ·  {mode.upper()}  ·  v{self.nix.version}"
+        self.sub_title = f"{name}  ·  {_head(mode.upper())}  ·  v{self.nix.version}"
 
     def _write_session_start(self) -> None:
         l = self._t
@@ -1651,29 +1706,37 @@ class NixUI(App):
     def show_help(self, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
         t = self._t
         log = self._log()
-        log.write(Text(f"  {t('tbl.commands').upper()}",
-                       style=f"bold {BLUE}"))
+        log.write(Text("  " + _head(t("tbl.commands")), style=f"bold {BLUE}"))
+        # Size the usage column to the widest entry so localized (longer) usage
+        # strings get their own room instead of being clipped at a fixed 22.
+        width = 22
+        for _title, items in groups:
+            for usage, _desc in items:
+                width = max(width, min(cell_len(usage) + 2, 46))
         for title, items in groups:
-            log.write(Text("    " + title, style=f"bold {PURPLE}"))
+            log.write(Text("    " + _head(title), style=f"bold {PURPLE}"))
             for usage, desc in items:
                 log.write(
                     Text()
-                    .append("      " + usage.ljust(22), style=GREEN)
+                    .append("      " + _ljust(usage, width), style=GREEN)
                     .append(_clip(desc), style=FG)
                 )
 
     def show_block(self, title: str,
                    rows: list[tuple[str, str, str]]) -> None:
         self._log_write_header(self._log(), title)
+        width = 24
+        for label, _value, _color in rows:
+            width = max(width, min(cell_len(str(label)) + 2, 40))
         for label, value, color in rows:
             self._log().write(
                 Text()
-                .append("    " + str(label).ljust(24), style=CYAN)
+                .append("    " + _ljust(label, width), style=CYAN)
                 .append(_clip(str(value)), style=color)
             )
 
     def _log_write_header(self, log, title: str) -> None:
-        log.write(Text(f"  {title.upper()}", style=f"bold {BLUE}"))
+        log.write(Text("  " + _head(title), style=f"bold {BLUE}"))
 
     def show_tree(self, title: str, lines: list[str]) -> None:
         self._log_write_header(self._log(), title)
@@ -1695,7 +1758,7 @@ class NixUI(App):
                     source_files: int, total_lines: int) -> None:
         t = self._t
         log = self._log()
-        log.write(Text(f"  {t('tbl.project_status').upper()}",
+        log.write(Text("  " + _head(t("tbl.project_status")),
                        style=f"bold {BLUE}"))
         fields = [
             (t("st.root"), root, FG),
@@ -1708,10 +1771,11 @@ class NixUI(App):
             (t("st.classes"), str(classes), GREEN),
             (t("st.lines"), f"{total_lines:,}", GREEN),
         ]
+        width = max(20, max(cell_len(f[0]) for f in fields) + 2)
         for label, value, color in fields:
             log.write(
                 Text()
-                .append("    " + label.ljust(20), style=CYAN)
+                .append("    " + _ljust(label, width), style=CYAN)
                 .append(value, style=color)
             )
 
@@ -1727,12 +1791,13 @@ class NixUI(App):
             .append(f"{info.total_lines:,} {t('scan.lines')}", style=CYAN)
         )
         if info.extensions:
-            log.write(Text(f"  {t('tbl.extensions').upper()}",
+            log.write(Text("  " + _head(t("tbl.extensions")),
                            style=f"bold {PURPLE}"))
+            ext_width = max(14, max(cell_len(e) for e, _c in info.top_extensions) + 2)
             for ext, count in info.top_extensions:
                 log.write(
                     Text()
-                    .append("    " + ext.ljust(14), style=FG)
+                    .append("    " + _ljust(ext, ext_width), style=FG)
                     .append(str(count), style=GREEN)
                 )
 
@@ -1768,10 +1833,11 @@ class NixUI(App):
         ]
         log = self._log()
         log.write(art)
+        width = max(20, max(cell_len(r[0]) for r in rows) + 2)
         for label, value, color in rows:
             log.write(
                 Text()
-                .append("    " + label.ljust(20), style=CYAN)
+                .append("    " + _ljust(label, width), style=CYAN)
                 .append(value, style=color)
             )
 
@@ -1787,7 +1853,7 @@ class NixUI(App):
         if not lines:
             log.write(Text(self._t("fb.no_logs"), style=DIM))
             return
-        log.write(Text(f"  {t('tbl.session_log').upper()}  {path}",
+        log.write(Text(f"  {_head(t('tbl.session_log'))}  {path}",
                        style=f"bold {DIM}"))
         for line in lines[-40:]:
             log.write(Text("    " + line, style=DIM))
@@ -1798,7 +1864,7 @@ class NixUI(App):
         if not entries:
             log.write(Text(self._t("fb.no_history"), style=DIM))
             return
-        log.write(Text(f"  {t('tbl.journal').upper()}",
+        log.write(Text("  " + _head(t("tbl.journal")),
                        style=f"bold {BLUE}"))
         kind_colors = {
             "SYSTEM": DIM, "SCAN": CYAN, "PET": PURPLE, "ERROR": RED,

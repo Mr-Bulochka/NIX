@@ -15,6 +15,14 @@ IGNORED_FILES = {
 }
 
 
+from .modules.loader import all_modules, module_for_file
+from .modules.engine import scan_blocks
+
+# Module metadata is static for the process, so resolve it once instead of
+# walking the package layout for every file we scan.
+_MODULE_CACHE: dict = {m.id: m for m in all_modules()}
+
+
 @dataclass
 class ProjectInfo:
     root: Path
@@ -65,6 +73,23 @@ def _count_code(path: Path, info: ProjectInfo) -> None:
     lines = text.splitlines()
     info.total_lines += len(lines)
 
+    lang_id = module_for_file(str(path))
+    mod = _MODULE_CACHE.get(lang_id) if lang_id else None
+    if mod is not None:
+        # Count through the language modules so that `functions` / `classes`
+        # are populated for every supported language. Previously this looked for
+        # a Python-only `def ` / `class ` prefix, so a Go, Rust or TypeScript
+        # project always reported 0 of both -- indistinguishable from an
+        # empty project in `scan`.
+        for kind, bdef in mod.blocks.items():
+            if kind == "function":
+                info.functions += len(scan_blocks(lines, kind, bdef))
+            elif kind == "class":
+                info.classes += len(scan_blocks(lines, kind, bdef))
+        return
+
+    # No module for this extension: fall back to the Python shapes rather than
+    # reporting nothing at all.
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("def ") and "(" in stripped:

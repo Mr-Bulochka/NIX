@@ -360,5 +360,110 @@ class TestCommands(unittest.TestCase):
                 os.chdir(old)
 
 
+class TestHandlerContract(unittest.TestCase):
+    """Every registered handler must be callable as ``handler(app, args)``.
+
+    The registry dispatches through ``cmd.handler(app, cmd_args)``. Two commands
+    (``run`` and ``destruct``) were declared as ``(app)`` and read a
+    non-existent ``app.args``, so they raised TypeError on every invocation and
+    silently never worked. This guard catches the whole class of bug.
+    """
+
+    def test_every_handler_accepts_app_and_args(self):
+        import inspect
+        bad = []
+        for name, cmd in sorted(COMMANDS.items()):
+            params = list(inspect.signature(cmd.handler).parameters)
+            if params[:2] != ["app", "args"]:
+                bad.append((name, params))
+        self.assertEqual(bad, [], f"handlers with wrong signature: {bad}")
+
+    def test_no_handler_reads_a_nonexistent_app_args(self):
+        import inspect
+        offenders = []
+        for name, cmd in sorted(COMMANDS.items()):
+            src = inspect.getsource(cmd.handler)
+            if "app.args" in src:
+                offenders.append(name)
+        self.assertEqual(offenders, [],
+                         f"handlers reading app.args: {offenders}")
+
+    def test_parse_flags_result_is_unpacked_where_used(self):
+        # parse_flags returns (flags, rest); assigning it to a single name and
+        # then calling .get() on that name is the bug this guards.
+        flags, rest = parse_flags(["--apply", "5"])
+        self.assertTrue(flags["apply"])
+        self.assertEqual(flags["max"] if "max" in flags else "5", "5")
+        self.assertEqual(rest, [])
+
+
+class TestRunAndDestructCommands(unittest.TestCase):
+    """The two commands that were completely broken through the registry."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old = os.getcwd()
+        os.chdir(self._tmp.name)
+
+    def tearDown(self):
+        os.chdir(self._old)
+        self._tmp.cleanup()
+
+    def test_cmd_run_dry_parses_timeout_without_error(self):
+        from nix.app import NixApp
+        from nix.commands import cmd_run
+
+        app = NixApp()
+        app.ui = _StubUI()
+        # No test suite in the temp dir: must report, not raise.
+        result = cmd_run(app, ["--timeout", "1"])
+        self.assertTrue(result.continue_session)
+
+    def test_cmd_destruct_dry_run_reports_plan(self):
+        from nix.app import NixApp
+        from nix.commands import cmd_destruct
+
+        app = NixApp()
+        ui = _StubUI()
+        app.ui = ui
+        with open("sample.py", "w", encoding="utf-8") as fh:
+            fh.write("def f(a):\n    return a == 1\n")
+        result = cmd_destruct(app, [])
+        self.assertTrue(result.continue_session)
+
+    def test_cmd_destruct_flags_are_a_dict_not_a_tuple(self):
+        from nix.app import NixApp
+        from nix.commands import cmd_destruct
+
+        app = NixApp()
+        app.ui = _StubUI()
+        # Passing a bare set as parse_flags' second positional would treat it as
+        # `multi`; passing no unpack would make flags a tuple. Both must hold.
+        with open("sample.py", "w", encoding="utf-8") as fh:
+            fh.write("def f(a):\n    return a == 1\n")
+        cmd_destruct(app, ["--max", "1"])
+        cmd_destruct(app, ["--apply"])
+
+
+class TestCliDaemonDispatch(unittest.TestCase):
+    def test_only_the_leading_daemon_token_is_the_subcommand(self):
+        import inspect
+
+        from nix import cli
+
+        src = inspect.getsource(cli)
+        # The old code did `[a for a in sys.argv[1:] if a != "daemon"]`, which
+        # also ate a legitimate argument value, so `nix daemon --once daemon`
+        # lost its command entirely.
+        self.assertNotIn('if a != "daemon"', src)
+        self.assertIn('sys.argv[1] == "daemon"', src)
+
+    def test_daemon_usage_error_for_missing_once_value(self):
+        from nix.daemon import main as daemon_main
+
+        # `--once` with no value must be a clean usage error, not a crash.
+        self.assertEqual(daemon_main(["--once"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

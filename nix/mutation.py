@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -96,8 +97,15 @@ class MutationEngine:
                     pass
             self.app.pet_store.save(pet)
         if self.app.config.checkpoint_on_mutate:
+            # A fixed "auto-<kind>" name made every new mutation of the same
+            # kind delete the previous snapshot: Checkpoints.create() wipes an
+            # existing destination. Two `gen` runs in a row therefore left only
+            # the newest snapshot behind. Microseconds keep them distinct even
+            # when several mutations land inside the same second.
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
             try:
-                self.app.checkpoints.create("auto-" + kind, silent=True)
+                self.app.checkpoints.create(
+                    f"auto-{kind}-{stamp}", silent=True)
                 self.app.mutations.reset_budget()
             except Exception:
                 pass

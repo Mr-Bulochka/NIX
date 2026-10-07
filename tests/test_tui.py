@@ -391,7 +391,7 @@ class TestTUI(unittest.TestCase):
                 cmd.focus()
                 await pilot.press("d")
                 await pilot.pause()
-                assert [item[0] for item in ui._suggest_items] == [
+                assert [item[0] for item in ui._suggest_items][:3] == [
                     "deps", "destruct", "defs"]
 
                 await pilot.press("down")
@@ -509,7 +509,7 @@ class TestTUI(unittest.TestCase):
                 assert all(name.startswith("d") for name, _, _ in matches)
         self._run(scenario())
 
-    def test_suggest_is_prefix_only(self):
+    def test_suggest_ranks_prefix_before_substring(self):
         async def scenario():
             ui = NixUI(self.app)
             self.app.ui = ui
@@ -518,13 +518,24 @@ class TestTUI(unittest.TestCase):
                 pilot.app.screen.query_one("Input").value = "Tester"
                 await pilot.press("enter")
                 await pilot.pause()
+                # Prefix matches come first and keep their original order.
                 names = [n for n, _, _ in ui._suggest_matches("d")]
-                assert names == ["deps", "destruct", "defs"]
-                # Substring matches are deliberately excluded: on "c" a
-                # substring filter would surface echo/which/scan, which
-                # do not start with "c" and are noise in a command list.
-                assert "echo" not in [n for n, _, _ in ui._suggest_matches("c")]
+                assert names[:3] == ["deps", "destruct", "defs"]
+                # Substring matches are now allowed, but always rank below the
+                # prefix hits: "c" must surface the c-commands first.
+                c_names = [n for n, _, _ in ui._suggest_matches("c")]
+                assert c_names[0] == "checkpoint"
+                assert "echo" in c_names
+                assert c_names.index("echo") > c_names.index("checkpoint")
+                # A query in the middle of a name now resolves the command.
+                assert [n for n, _, _ in ui._suggest_matches("eck")] == [
+                    "checkpoint"]
+                # Matching the localized description works too.
+                assert "tests" in [n for n, _, _ in ui._suggest_matches("test")]
                 assert [n for n, _, _ in ui._suggest_matches("zzzz")] == []
+                # No raw i18n keys may leak into the suggestion rows.
+                for _n, usage, detail in ui._suggest_matches("e"):
+                    assert "cmd." not in usage and "cmd." not in detail
         self._run(scenario())
 
     def test_suggest_prefix_match_respects_case_setting(self):
@@ -1134,6 +1145,128 @@ def _empty_info():
 
     return ProjectInfo(root=Path("."), files=0, directories=0, extensions={},
                        functions=0, classes=0, total_lines=0, source_files=0)
+
+
+class TestLayoutHelpers(unittest.TestCase):
+    """Width-correct column layout for localized (Cyrillic) text."""
+
+    def test_ljust_pads_to_exact_cell_width(self):
+        from rich.cells import cell_len
+
+        for text, width in (("Core", 12), ("Ядро", 12), ("Настройки", 12),
+                            ("", 8)):
+            out = nix.ui._ljust(text, width)
+            self.assertEqual(cell_len(out), width, msg=text)
+            self.assertTrue(out.startswith(text))
+
+    def test_ljust_truncates_overlong_without_exceeding(self):
+        from rich.cells import cell_len
+
+        long_usage = "wrap <файл> <строка> in <оп> [--слот значение] [--apply]"
+        for width in (12, 22, 40):
+            out = nix.ui._ljust(long_usage, width)
+            self.assertLessEqual(cell_len(out), width, msg=width)
+            self.assertTrue(out.endswith("\u2026"), msg=width)
+
+    def test_ljust_keeps_column_aligned_across_mixed_scripts(self):
+        from rich.cells import cell_len
+
+        # Every rendered label must occupy the same number of cells, which is
+        # what makes the two columns line up in the terminal.
+        labels = ["Root", "Mode", "Files", "Корень", "Режим", "Файлы"]
+        padded = [nix.ui._ljust(label, 20) for label in labels]
+        self.assertEqual({cell_len(p) for p in padded}, {20})
+
+    def test_clip_respects_cell_width(self):
+        from rich.cells import cell_len
+
+        text = "gen <тип> <имя> [--into файл] [--at строка] [--apply]"
+        for limit in (10, 20, 40):
+            out = nix.ui._clip(text, limit)
+            self.assertLessEqual(cell_len(out), limit, msg=limit)
+            self.assertTrue(out.endswith("\u2026"), msg=limit)
+
+    def test_clip_short_text_untouched(self):
+        from rich.cells import cell_len
+
+        self.assertEqual(nix.ui._clip("Ядро", 40), "Ядро")
+
+    def test_head_uppercases_without_widening(self):
+        from rich.cells import cell_len
+
+        self.assertEqual(nix.ui._head("Core"), "CORE")
+        # 'ß'.upper() is 'SS': two cells from one. The original must win.
+        widened = "ßrden"
+        self.assertLessEqual(cell_len(nix.ui._head(widened)),
+                             cell_len(widened))
+
+    def test_head_keeps_ascii_headings_uppercase(self):
+        self.assertEqual(nix.ui._head("Project Status"), "PROJECT STATUS")
+
+
+class TestSuggestLocalization(unittest.TestCase):
+    """Autocomplete must match Cyrillic queries against Russian descriptions."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._cwd = os.getcwd()
+        os.chdir(self._tmp.name)
+        self.root = Path(self._tmp.name)
+        self.app = NixApp()
+
+    def tearDown(self):
+        os.chdir(self._cwd)
+        self._tmp.cleanup()
+
+    def test_russian_query_matches_russian_descriptions(self):
+        async def scenario():
+            self.app.config.language = "ru"
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                # "настр" only appears in the Russian description of settings.
+                assert [n for n, _, _ in ui._suggest_matches("настр")] == [
+                    "settings"]
+                # "журнал" appears in the Russian descriptions of these three.
+                assert set(n for n, _, _ in ui._suggest_matches("журнал")) == {
+                    "logs", "history", "journal"}
+                # Details shown next to a Russian match are Russian too.
+                details = [d for _n, _u, d in ui._suggest_matches("настр")]
+                self.assertTrue(any("Настройки" in d or "настройки" in d
+                                    for d in details), details)
+
+        asyncio.run(scenario())
+
+    def test_suggest_box_becomes_visible_and_tab_applies(self):
+        async def scenario():
+            self.app.config.language = "ru"
+            ui = NixUI(self.app)
+            self.app.ui = ui
+            async with ui.run_test(size=(160, 40)) as pilot:
+                await pilot.pause()
+                pilot.app.screen.query_one("Input").value = "Tester"
+                await pilot.press("enter")
+                await pilot.pause()
+                cmd = pilot.app.query_one("#cmd")
+                box = pilot.app.query_one("#suggest")
+                cmd.focus()
+                cmd.value = "пит"
+                await pilot.pause()
+                assert ui._suggest_items
+                assert "visible" in box.classes
+                # Applying a suggestion clears the list, so capture the
+                # expected value before pressing Tab.
+                expected = ui._suggest_items[0][0]
+                await pilot.press("tab")
+                await pilot.pause()
+                assert cmd.value == expected
+                assert not ui._suggest_items
+
+        asyncio.run(scenario())
 
 
 if __name__ == "__main__":

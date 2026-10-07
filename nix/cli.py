@@ -12,10 +12,12 @@ def main() -> None:
         print("usage: nix [--version|--help]")
         print("       nix daemon [--socket host:port] [--once 'command']")
         sys.exit(0)
-    if "daemon" in sys.argv:
+    # Only the leading `daemon` token is the subcommand. Filtering every
+    # occurrence used to eat a legitimate argument, so `nix daemon --once
+    # daemon` lost its command value entirely.
+    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
         from .daemon import main as daemon_main
-        rest = [a for a in sys.argv[1:] if a != "daemon"]
-        sys.exit(daemon_main(rest))
+        sys.exit(daemon_main(sys.argv[2:]))
     try:
         app = NixApp()
         app.run()

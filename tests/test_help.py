@@ -165,5 +165,48 @@ class TestWhichAndSingleCommandHelp(unittest.TestCase):
         self.assertEqual(app.ui.blocks, [])
 
 
+class TestLocalizedUsageWidth(unittest.TestCase):
+    """Russian usage strings are much longer than the old fixed 22-char column.
+
+    The help table used ``usage.ljust(22)``, which silently did nothing once the
+    localized string exceeded 22 characters, so every such row pushed its
+    description out of alignment.
+    """
+
+    def test_russian_usage_exceeds_the_old_fixed_column(self):
+        # Guards the premise of the bug: if this ever stops being true the
+        # dynamic column below is no longer needed.
+        app = _StubApp("ru")
+        over = [
+            name for name, cmd in COMMANDS.items()
+            if len(_usage(app, cmd)) > 22
+        ]
+        self.assertTrue(over, "expected some RU usage strings longer than 22")
+
+    def test_every_russian_usage_string_is_non_empty(self):
+        app = _StubApp("ru")
+        for name, cmd in COMMANDS.items():
+            with self.subTest(name=name):
+                usage = _usage(app, cmd)
+                self.assertTrue(usage)
+                self.assertNotIn("cmd.", usage)
+
+    def test_help_rows_carry_localized_usage_under_ru(self):
+        app = _StubApp("ru")
+        cmd_help(app, [])
+        shown = [usage
+                 for _title, items in app.ui.help_groups
+                 for usage, _desc in items]
+        self.assertEqual(len(shown), len(COMMANDS))
+        # Cyrillic usage text must reach the table, not a raw registry string
+        # and not a raw i18n key.
+        self.assertTrue(any(usage == _usage(app, COMMANDS["make"])
+                            for usage in shown))
+        self.assertTrue(any(usage == _usage(app, COMMANDS["recipe"])
+                            for usage in shown))
+        for usage in shown:
+            self.assertNotIn("cmd.", usage)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -74,7 +74,8 @@ class Brain:
                         "end": block.end,
                     })
         index = {"files": file_count, "symbols": symbols,
-                 "built_at": _now()}
+                 "built_at": _now(),
+                 "source_stamp": self._source_stamp()}
         self.dir.mkdir(parents=True, exist_ok=True)
         self.index_path.write_text(
             json.dumps(index, ensure_ascii=False, indent=1),
@@ -166,9 +167,43 @@ class Brain:
         patterns = self._load_json(self.patterns_path) or {}
         return index, patterns
 
+    def _source_stamp(self) -> str:
+        """Cheap fingerprint of the project's source tree.
+
+        Combines the file count with the newest modification time so that any
+        edit, addition or removal changes the value. Used to detect that a
+        previously built index has gone stale.
+        """
+        newest = 0.0
+        count = 0
+        try:
+            for path in self._iter_source_files():
+                count += 1
+                try:
+                    mtime = path.stat().st_mtime
+                except OSError:
+                    continue
+                if mtime > newest:
+                    newest = mtime
+        except OSError:
+            return ""
+        return f"{count}:{newest:.6f}"
+
     def ensure(self) -> tuple[dict, dict]:
+        """Return the index, rebuilding it when the sources moved on.
+
+        Previously this only built when the index file was missing, so the very
+        first scan froze the index for the rest of the project: after editing
+        code, ``defs`` / ``gen`` / ``ident`` all kept reporting the symbols and
+        naming style captured on that first run.
+        """
         if not self.index_path.exists():
             self.build()
+        else:
+            stored = self.load()[0].get("source_stamp")
+            current = self._source_stamp()
+            if stored is None or stored != current:
+                self.build()
         return self.load()
 
     # ---- helpers ------------------------------------------------------

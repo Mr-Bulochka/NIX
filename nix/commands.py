@@ -446,8 +446,8 @@ def cmd_tests(app: "NixApp", args: list[str]) -> CommandResult:
 
 
 @register("run", "run all tests", "run [--timeout N]")
-def cmd_run(app):
-    flags = parse_flags(app.args, {"timeout"})
+def cmd_run(app, args: list[str]):
+    flags, _rest = parse_flags(args)
     from .runner import run_tests
     timeout = _timeout(app, flags.get("timeout"))
     app.ui.show_message("SYSTEM", app.t("run.start"))
@@ -808,8 +808,8 @@ def _checkpoint_list(app: "NixApp") -> CommandResult:
 
 
 @register("destruct", "mutate code and verify tests catch it", "destruct [--apply] [--keep] [--timeout N] [--max N]")
-def cmd_destruct(app):
-    flags = parse_flags(app.args, {"apply", "keep", "timeout", "max"})
+def cmd_destruct(app, args: list[str]):
+    flags, _rest = parse_flags(args)
     max_mutations = _num(flags.get("max"), 0) or None
     keep = bool(flags.get("keep"))
     from .destruct import plan_mutations, run_destruct

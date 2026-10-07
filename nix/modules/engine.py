@@ -19,6 +19,20 @@ def leading_ws(line: str) -> int:
 
 
 def _compile(start_re) -> "re.Pattern[str] | None":
+    """Compile a block-start regex, or return None when it is unusable.
+
+    Two malformed-module cases used to be mishandled:
+
+    * ``start: null`` reached ``re.compile`` and raised an uncaught
+      ``TypeError``, crashing ``scan`` / ``defs`` / ``blocks`` outright;
+    * a missing or empty ``start`` compiled to a pattern that matches *every*
+      string, so every non-empty line in the file was reported as a block.
+
+    Language modules are plain-data JSON, so a hand-written module can easily
+    contain either mistake. Both now yield "no blocks" instead.
+    """
+    if not isinstance(start_re, str) or not start_re.strip():
+        return None
     try:
         return re.compile(start_re)
     except re.error:
@@ -111,10 +125,25 @@ def find_block_at_line(lines: list[str], line_no: int,
     return best
 
 
+_SLOT_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+
 def fill_slots(text: str, slots: dict) -> str:
-    for key, value in slots.items():
-        text = text.replace("{{" + key + "}}", str(value))
-    return text
+    """Substitute ``{{name}}`` placeholders in a single pass.
+
+    The previous implementation looped over the slots doing ``str.replace``,
+    so a value that itself contained a placeholder was re-scanned and expanded
+    against the remaining slots. Passing a body such as ``"return f('{{x}}')"``
+    therefore silently produced ``"return f('value_of_x')"`` instead of
+    emitting the text the caller asked for. One regex pass never re-examines
+    what it has already inserted, so values stay verbatim.
+    """
+
+    def _sub(match: re.Match) -> str:
+        key = match.group(1)
+        return str(slots[key]) if key in slots else match.group(0)
+
+    return _SLOT_RE.sub(_sub, str(text))
 
 
 def apply_wrap(lines: list[str], block: Block, op_def: dict,

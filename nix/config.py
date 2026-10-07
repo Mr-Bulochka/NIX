@@ -189,8 +189,8 @@ class ConfigStore:
 
     def save(self, config: Config) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = asdict(config)
-        self.path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        from .state import atomic_write_text
+        atomic_write_text(
+            self.path,
+            json.dumps(asdict(config), indent=2, ensure_ascii=False),
         )

@@ -75,5 +75,59 @@ class TestBrain(unittest.TestCase):
         self.assertIn("fetch", names)
 
 
+class TestBrainStaleness(unittest.TestCase):
+    """The index must follow the sources, not freeze on the first scan."""
+
+    def _project(self):
+        tmp = Path(tempfile.mkdtemp())
+        root = tmp / "proj"
+        root.mkdir()
+        (root / "api.py").write_text(
+            "def first():\n    return 1\n", encoding="utf-8")
+        return root, tmp / "nixstate"
+
+    def test_ensure_rebuilds_after_a_source_edit(self):
+        root, nix = self._project()
+        brain = Brain(nix, root)
+        index, _ = brain.ensure()
+        self.assertIn("first", [s["name"] for s in index["symbols"]])
+
+        # Add a new function. The old ensure() returned the frozen index.
+        import os
+        import time
+        (root / "api.py").write_text(
+            "def first():\n    return 1\n\ndef second():\n    return 2\n",
+            encoding="utf-8")
+        # Make the mtime bump unambiguous on coarse-grained filesystems.
+        stamp = time.time() + 2
+        os.utime(root / "api.py", (stamp, stamp))
+
+        index, _ = brain.ensure()
+        names = [s["name"] for s in index["symbols"]]
+        self.assertIn("second", names,
+                      "index went stale: ensure() must rebuild after an edit")
+
+    def test_ensure_rebuilds_after_a_new_file(self):
+        root, nix = self._project()
+        brain = Brain(nix, root)
+        index, _ = brain.ensure()
+        self.assertNotIn("added", [s["name"] for s in index["symbols"]])
+        (root / "extra.py").write_text(
+            "def added():\n    return 3\n", encoding="utf-8")
+        index, _ = brain.ensure()
+        self.assertIn("added", [s["name"] for s in index["symbols"]])
+
+    def test_ensure_does_not_rebuild_when_nothing_changed(self):
+        root, nix = self._project()
+        brain = Brain(nix, root)
+        brain.ensure()
+        before = brain.index_path.stat().st_mtime_ns
+        import time
+        time.sleep(0.01)
+        brain.ensure()
+        self.assertEqual(brain.index_path.stat().st_mtime_ns, before,
+                         "unchanged sources must not trigger a rebuild")
+
+
 if __name__ == "__main__":
     unittest.main()

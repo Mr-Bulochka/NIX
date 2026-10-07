@@ -7,3 +7,5 @@ venv/
 *.egg-info/
 build/
 dist/
+.opencode/
+.github/workflows/opencode.yml

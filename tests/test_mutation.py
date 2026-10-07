@@ -175,9 +175,32 @@ class RecordTests(TestMutation):
     def test_record_creates_auto_checkpoint(self):
         app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
         app.mutations.record("mut", "src/app.py", "backup")
-        cp = self._cp_dir(app, KIND_TEMP) / "auto-mut"
-        self.assertTrue(cp.is_dir())
-        self.assertTrue((cp / "manifest.json").is_file())
+        cps = [p for p in self._cp_dir(app, KIND_TEMP).iterdir()
+               if p.is_dir() and p.name.startswith("auto-mut")]
+        self.assertEqual(len(cps), 1)
+        self.assertTrue((cps[0] / "manifest.json").is_file())
+
+    def test_repeated_mutations_keep_every_auto_checkpoint(self):
+        # Regression: the auto checkpoint used to be named `auto-<kind>`, and
+        # Checkpoints.create() wipes an existing destination. So a second
+        # mutation of the same kind deleted the first snapshot and only the
+        # newest one survived.
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.mutations.record("mut", "src/app.py", "backup1")
+        app.mutations.record("mut", "src/app.py", "backup2")
+        cps = [p for p in self._cp_dir(app, KIND_TEMP).iterdir()
+               if p.is_dir() and p.name.startswith("auto-mut")]
+        self.assertEqual(len(cps), 2,
+                         f"expected both snapshots, found {[p.name for p in cps]}")
+
+    def test_different_kinds_do_not_collide(self):
+        app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)
+        app.mutations.record("gen", "src/app.py", "b1")
+        app.mutations.record("wrap", "src/app.py", "b2")
+        temp = self._cp_dir(app, KIND_TEMP)
+        kinds = {p.name.split("-")[1] for p in temp.iterdir()
+                 if p.is_dir() and p.name.startswith("auto-")}
+        self.assertEqual(kinds, {"gen", "wrap"})
 
     def test_record_without_pet_is_safe(self):
         app = self._make_app({"src/app.py": "x = 1\n"}, with_pet=False)

@@ -5,6 +5,90 @@ All notable changes to NIX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0b1] - 2026-10-07
+
+First pre-release of the 0.4 line. Found by running NIX's own mutation
+testing (`nix destruct`) against the NIX codebase and by a headless smoke pass
+over all 47 commands.
+
+### Fixed
+- `run` and `destruct` were unusable. Both handlers were declared
+  `def cmd_x(app)`, so the registry's `handler(app, args)` call raised
+  `TypeError` on every invocation. They also read a non-existent `app.args`
+  instead of their `args` parameter, and assigned `parse_flags()`'s
+  `(flags, rest)` tuple to a single name, so `flags.get(...)` raised
+  `AttributeError: 'tuple' object has no attribute 'get'`. Three separate
+  defects per command.
+- `parse_flags()` was called with a *set* of flag names as its second
+  positional argument. That parameter is `multi` (flags that consume several
+  following values), not a list of known flags, so `--timeout 5 6` silently
+  folded the extra words into the value.
+- `nix daemon --once <cmd>` dropped any argument equal to `daemon`, not just
+  the leading subcommand token, so `nix daemon --once daemon` lost its command
+  entirely and failed with a usage error.
+- Automatic `checkpoint_on_mutate` snapshots no longer destroy each other. The
+  name was the fixed `auto-<kind>`, and `Checkpoints.create()` wipes an
+  existing destination, so a second `gen` deleted the first snapshot. Names now
+  carry a microsecond timestamp.
+- The project index (`.nix/brain/`) now follows the sources.
+  `Brain.ensure()` only built when `index.json` was absent, so after the first
+  scan the index was frozen for the rest of the project: `defs`, `gen` and
+  `ident` kept reporting symbols and naming style from that first run, which
+  contradicted the documented "always fresher than the developer's memory".
+  The index records a source fingerprint and rebuilds when it changes, and does
+  not rebuild when nothing moved.
+- `scan` no longer reports zero functions and classes for non-Python projects.
+  The counter looked for a Python-only `def ` / `class ` prefix even though it
+  ran for 13 extensions, so a Go, Rust or TypeScript project looked identical
+  to an empty directory. Counting now goes through the bundled language
+  modules, with the previous heuristic kept as a fallback for extensions that
+  have no module.
+- A malformed language module no longer crashes or mis-reports. A block
+  definition with a missing or empty `start` regex compiled to a pattern that
+  matched *every* line, so `scan` / `defs` / `blocks` reported every non-empty
+  line of the file as a block. `"start": null` raised an uncaught `TypeError`
+  from `re.compile`. Both now yield no blocks.
+- Placeholder substitution no longer cascades. `fill_slots` looped over the
+  slots doing `str.replace`, so a value containing `{{...}}` was re-scanned and
+  expanded against the remaining slots -- generating a body like
+  `return f('{{x}}')` emitted the value of `x` instead of the text. Substitution
+  is now a single regex pass, so inserted values stay verbatim and the result no
+  longer depends on dict ordering.
+- `destruct` restores mutated files even when interrupted. Restoration happened
+  only on the clean path after the mutation loop, so a Ctrl-C, a killed process
+  or any exception left a mutated source file in the checkout -- observed in
+  practice as `if c != ";"` surviving in `nix/app.py` after this audit. The
+  per-item backups are now restored from a `finally` block, with the recorded
+  original text as a second line of defence.
+- State and config are written atomically. `write_json` and `ConfigStore.save`
+  truncated the target in place, so an interruption mid-write left invalid
+  JSON; `read_json` swallows the parse error and returns the default, which
+  silently reverted every user setting to its factory value. Both now write a
+  sibling temp file, fsync it and `os.replace` it into position.
+
+### Added
+- `tests/test_commands.py::TestHandlerContract` asserts every registered
+  handler accepts `(app, args)` and never reads `app.args`, so a signature
+  mismatch fails the suite instead of shipping a dead command.
+- Regression coverage for index staleness, multi-language `scan` counts,
+  repeated auto-checkpoints, the `destruct` flag parsing and the `daemon`
+  subcommand token.
+- Regression coverage for malformed block definitions, single-pass placeholder
+  substitution, interrupted `destruct` runs and atomic state writes.
+- `tests/test_version.py` accepts PEP 440 pre-release versions and asserts the
+  version really is a pre-release of `0.4`, so the beta cannot be published as
+  if the final release already existed.
+
+### Known limitations
+- The automatic checkpoint is still taken *after* the write it is meant to
+  protect, so it cannot undo that write. Per-command backups
+  (`.nix/brain/backups/`) hold the pre-write content and remain the reliable
+  recovery path. Fixing the ordering means threading a pre-write hook through
+  every mutating command and is deferred.
+- `destruct` has no cross-process lock. Two concurrent runs against the same
+  checkout will fight over the working tree; the interrupt-safety fix above
+  keeps the files clean but the results are meaningless.
+
 ## [0.3.11] - 2026-10-04
 
 ### Fixed

@@ -145,45 +145,72 @@ def run_destruct(app: NixApp, timeout: float = DEFAULT_TIMEOUT,
     app.checkpoints.create(cp_name, silent=True)
     report.checkpoint = cp_name
     backups_dir = app.state.nix / "brain" / "backups"
-    for item in plan:
-        path = Path(item["path"])
-        law = app.mutations.check_laws(item["rel"])
-        if law is not None:
-            item["status"] = "blocked"
-            item["detail"] = app.t(
-                "fb.law_blocked", path=item["rel"], law=law)
-            continue
-        backup = _backup_file(path, backups_dir)
-        item["backup"] = str(backup)
-        try:
-            path.write_text(item["modified"], encoding="utf-8")
-        except OSError as exc:
-            item["status"] = "error"
-            item["detail"] = str(exc)
-            continue
-        app.mutations.record("destruct", item["rel"], backup)
-        result = run_tests(app.root, timeout=timeout)
-        item["result"] = result
-        if result.killed:
-            item["status"] = "killed"
-            item["detail"] = app.t(
-                "fb.destruct_killed",
-                file=item["rel"],
-                passed=result.passed,
-                failed=result.failed,
-            )
+    # Every mutation is a real edit to a real source file. Restoring was only
+    # attempted on the clean, non-`keep` path at the end of the loop, so a
+    # Ctrl-C, a killed process or any exception in between left a mutated file
+    # behind in the user's checkout. The per-item backups are the source of
+    # truth, so restore them from a finally block in every case.
+    interrupted = False
+    try:
+        for item in plan:
+            path = Path(item["path"])
+            law = app.mutations.check_laws(item["rel"])
+            if law is not None:
+                item["status"] = "blocked"
+                item["detail"] = app.t(
+                    "fb.law_blocked", path=item["rel"], law=law)
+                continue
+            backup = _backup_file(path, backups_dir)
+            item["backup"] = str(backup)
             try:
-                path.write_text(item["original"], encoding="utf-8")
-            except OSError:
-                pass
-        else:
-            item["status"] = "survived"
-            item["detail"] = app.t(
-                "fb.destruct_survived",
-                file=item["rel"],
-                passed=result.passed,
-                failed=result.failed,
-            )
+                path.write_text(item["modified"], encoding="utf-8")
+            except OSError as exc:
+                item["status"] = "error"
+                item["detail"] = str(exc)
+                continue
+            app.mutations.record("destruct", item["rel"], backup)
+            result = run_tests(app.root, timeout=timeout)
+            item["result"] = result
+            if result.killed:
+                item["status"] = "killed"
+                item["detail"] = app.t(
+                    "fb.destruct_killed",
+                    file=item["rel"],
+                    passed=result.passed,
+                    failed=result.failed,
+                )
+                try:
+                    path.write_text(item["original"], encoding="utf-8")
+                except OSError:
+                    pass
+            else:
+                item["status"] = "survived"
+                item["detail"] = app.t(
+                    "fb.destruct_survived",
+                    file=item["rel"],
+                    passed=result.passed,
+                    failed=result.failed,
+                )
+    except BaseException:
+        interrupted = True
+        raise
+    finally:
+        if not keep:
+            _restore_from_backups(plan)
+        if interrupted and not keep:
+            # Belt and braces: restore each mutated file from its recorded
+            # original text, so recovery does not depend on the backup files
+            # still being present.
+            for item in plan:
+                original = item.get("original")
+                if not original:
+                    continue
+                target = Path(item["path"])
+                try:
+                    if target.read_text(encoding="utf-8") != original:
+                        target.write_text(original, encoding="utf-8")
+                except OSError:
+                    pass
     if keep:
         report.kept = True
     else:

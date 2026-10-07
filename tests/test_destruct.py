@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -253,6 +254,85 @@ class DestructTests(unittest.TestCase):
         self.assertIsNone(report.baseline)
         self.assertEqual(report.candidates, [])
         self.assertEqual(app.pet["xp"], 0)
+
+
+class TestInterruptRestoresSources(unittest.TestCase):
+    """Killing a run must not leave mutated source files behind.
+
+    Restoration used to happen only on the clean path after the loop, so a
+    Ctrl-C or a killed process left `if c != ";"` sitting in the checkout. This
+    is the exact failure observed while auditing this codebase.
+    """
+
+    def _project(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        root = Path(tmp)
+        (root / "sample.py").write_text(
+            "def f(a):\n    if a == 1:\n        return True\n    return False\n",
+            encoding="utf-8")
+        return root
+
+    def test_keyboard_interrupt_restores_original_text(self):
+        root = self._project()
+        app = NixApp()
+        app.root = root
+        app.config.checkpoint_on_mutate = False
+        original = (root / "sample.py").read_text(encoding="utf-8")
+
+        calls = {"n": 0}
+
+        def fake_run_tests(_root, timeout=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return TestRun(ran_tests=5, passed=5, returncode=0)
+            raise KeyboardInterrupt()
+
+        with mock.patch("nix.destruct.run_tests", fake_run_tests):
+            with self.assertRaises(KeyboardInterrupt):
+                run_destruct(app, timeout=5)
+
+        self.assertEqual((root / "sample.py").read_text(encoding="utf-8"),
+                         original, "interrupted run left a mutation behind")
+
+    def test_arbitrary_exception_restores_original_text(self):
+        root = self._project()
+        app = NixApp()
+        app.root = root
+        app.config.checkpoint_on_mutate = False
+        original = (root / "sample.py").read_text(encoding="utf-8")
+
+        calls = {"n": 0}
+
+        def fake_run_tests(_root, timeout=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return TestRun(ran_tests=5, passed=5, returncode=0)
+            raise RuntimeError("boom")
+
+        with mock.patch("nix.destruct.run_tests", fake_run_tests):
+            with self.assertRaises(RuntimeError):
+                run_destruct(app, timeout=5)
+
+        self.assertEqual((root / "sample.py").read_text(encoding="utf-8"),
+                         original)
+
+    def test_keep_still_leaves_mutations_in_place(self):
+        root = self._project()
+        app = NixApp()
+        app.root = root
+        app.config.checkpoint_on_mutate = False
+        original = (root / "sample.py").read_text(encoding="utf-8")
+
+        def fake_run_tests(_root, timeout=None):
+            return TestRun(ran_tests=5, passed=5, returncode=0)
+
+        with mock.patch("nix.destruct.run_tests", fake_run_tests):
+            report = run_destruct(app, timeout=5, keep=True)
+
+        self.assertTrue(report.kept)
+        self.assertNotEqual((root / "sample.py").read_text(encoding="utf-8"),
+                            original, "--keep must leave the mutation")
 
 
 if __name__ == "__main__":

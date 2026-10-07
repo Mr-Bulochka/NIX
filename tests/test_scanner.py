@@ -53,5 +53,54 @@ class TestScanner(unittest.TestCase):
             self.assertEqual(top[1][1], 3)
 
 
+class TestScannerLanguageCoverage(unittest.TestCase):
+    """`functions` / `classes` must not be silently 0 for non-Python projects.
+
+    The counter used to look for a Python-only ``def `` / ``class `` prefix even
+    though it ran for 13 extensions, so a Go or Rust project reported zero of
+    both -- indistinguishable from an empty directory in `scan`.
+    """
+
+    def test_counts_go_and_rust_functions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "main.go").write_text(
+                "package main\n"
+                "func Add(a int, b int) int {\n\treturn a + b\n}\n"
+                "func Sub(a int, b int) int {\n\treturn a - b\n}\n",
+                encoding="utf-8")
+            (root / "lib.rs").write_text(
+                "pub fn compute(x: i32) -> i32 {\n    x + 1\n}\n",
+                encoding="utf-8")
+            info = scan_project(root)
+            self.assertGreaterEqual(info.functions, 3,
+                                    f"expected Go+Rust functions, got {info.functions}")
+
+    def test_python_fallback_still_counts_methods(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app.py").write_text(
+                "class S:\n"
+                "    def run(self):\n"
+                "        pass\n"
+                "def helper():\n"
+                "    pass\n", encoding="utf-8")
+            info = scan_project(root)
+            self.assertEqual(info.functions, 2)
+            self.assertEqual(info.classes, 1)
+
+    def test_unknown_extension_still_counted_as_python_shapes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # .rb is in the scan extension list but has no bundled module, so
+            # the Python-shaped fallback runs.
+            (root / "a.rb").write_text(
+                "def ruby_method(arg)\n  arg\nend\nclass Thing:\n  pass\n",
+                encoding="utf-8")
+            info = scan_project(root)
+            self.assertGreaterEqual(info.functions, 1)
+            self.assertGreaterEqual(info.classes, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

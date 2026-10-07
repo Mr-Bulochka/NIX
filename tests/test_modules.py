@@ -235,5 +235,81 @@ class TestEnabledModules(unittest.TestCase):
         self.assertFalse(is_module_enabled("python"))
 
 
+class TestMalformedBlockDef(unittest.TestCase):
+    """Language modules are hand-written JSON, so `start` can be junk.
+
+    A missing or empty ``start`` used to compile to a pattern matching every
+    string, so every non-empty line was reported as a block. ``start: null``
+    raised an uncaught TypeError and crashed the command outright.
+    """
+
+    LINES = ["import os", "", "x = 1", "y = 2", "z = 3"]
+
+    def test_missing_start_matches_nothing(self):
+        self.assertEqual(scan_blocks(self.LINES, "function", {}), [])
+
+    def test_empty_start_matches_nothing(self):
+        self.assertEqual(
+            scan_blocks(self.LINES, "function", {"start": ""}), [])
+        self.assertEqual(
+            scan_blocks(self.LINES, "function", {"start": "   "}), [])
+
+    def test_null_start_does_not_raise(self):
+        self.assertEqual(
+            scan_blocks(self.LINES, "function", {"start": None}), [])
+
+    def test_non_string_start_does_not_raise(self):
+        for junk in (123, [], {}, object()):
+            with self.subTest(junk=type(junk).__name__):
+                self.assertEqual(
+                    scan_blocks(self.LINES, "function", {"start": junk}), [])
+
+    def test_invalid_regex_still_graceful(self):
+        self.assertEqual(
+            scan_blocks(self.LINES, "function", {"start": "(unclosed"}), [])
+
+    def test_valid_start_still_works(self):
+        blocks = scan_blocks(
+            self.LINES + ["def run(self):", "    pass"],
+            "function", {"start": r"^(\s*)def\s+(?P<name>\w+)"})
+        self.assertEqual([b.name for b in blocks], ["run"])
+
+
+class TestFillSlots(unittest.TestCase):
+    """Placeholder substitution must be a single pass."""
+
+    def test_simple_substitution(self):
+        from nix.modules.engine import fill_slots
+        self.assertEqual(
+            fill_slots("except {{err}} as {{e}}:",
+                       {"err": "ValueError", "e": "exc"}),
+            "except ValueError as exc:")
+
+    def test_value_containing_a_placeholder_is_not_re_expanded(self):
+        from nix.modules.engine import fill_slots
+        # A generated body may legitimately contain braces. The old
+        # replace-per-key loop re-scanned inserted values, so this leaked the
+        # value of an unrelated slot into the output.
+        self.assertEqual(
+            fill_slots("{{a}}", {"a": "{{b}}", "b": "LEAKED"}), "{{b}}")
+
+    def test_unknown_placeholder_is_left_intact(self):
+        from nix.modules.engine import fill_slots
+        self.assertEqual(
+            fill_slots("{{known}} {{unknown}}", {"known": "yes"}),
+            "yes {{unknown}}")
+
+    def test_whitespace_inside_placeholders_is_tolerated(self):
+        from nix.modules.engine import fill_slots
+        self.assertEqual(
+            fill_slots("{{ name }}", {"name": "run"}), "run")
+
+    def test_result_does_not_depend_on_dict_order(self):
+        from nix.modules.engine import fill_slots
+        a = fill_slots("{{a}}", {"a": "{{b}}", "b": "X"})
+        b = fill_slots("{{a}}", {"b": "X", "a": "{{b}}"})
+        self.assertEqual(a, b)
+
+
 if __name__ == "__main__":
     unittest.main()
