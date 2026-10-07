@@ -65,6 +65,39 @@ def _read_json_text(text: str | None, default=None):
         return default
 
 
+GITIGNORE_ENTRY = ".nix/"
+
+
+def ensure_gitignored(root: Path) -> bool:
+    """Append ``.nix/`` to the project's ``.gitignore`` if it is not listed.
+
+    NIX creates `.nix/` inside the user's repository and fills it with pet
+    state, journals, logs and checkpoints. Without this, a plain `git add -A`
+    commits all of that into the project. Only a plain entry is appended, and
+    never a duplicate: an existing `#`-commented or already-present rule is
+    left alone.
+    """
+    path = root / ".gitignore"
+    try:
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError:
+        return False
+    for raw in existing.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        candidate = line.rstrip("/")
+        if candidate in (".nix", ".nix/"):
+            return False
+    prefix = "" if (not existing or existing.endswith("\n")) else "\n"
+    try:
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(f"{prefix}{GITIGNORE_ENTRY}\n")
+    except OSError:
+        return False
+    return True
+
+
 class State:
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
@@ -77,6 +110,7 @@ class State:
         self.nix.mkdir(parents=True, exist_ok=True)
         for subdir in STATE_DIRS:
             (self.nix / subdir).mkdir(parents=True, exist_ok=True)
+        ensure_gitignored(self.project_root)
 
     def read_json(self, relative: str, default=None):
         path = self.nix / relative

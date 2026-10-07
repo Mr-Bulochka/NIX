@@ -156,10 +156,13 @@ class TestCheckpoints(unittest.TestCase):
         }, with_pet=False)
         app.checkpoints.create("snap")
         Path(app.root, "app.py").write_text("print('v2')\n", encoding="utf-8")
+        expected = len(app.checkpoints.info("snap")["files"])
         msg = app.checkpoints.restore("snap", dry=True)
         self.assertTrue(msg)
         self.assertIn("[dry run]", msg)
-        self.assertIn("2", msg)
+        # Count whatever the snapshot actually holds rather than a hard-coded
+        # number: State.initialize() also writes a .gitignore entry.
+        self.assertIn(str(expected), msg)
         self.assertEqual(Path(app.root, "app.py").read_text(encoding="utf-8"),
                          "print('v2')\n")
         self.assertFalse((self._cp_dir(app, KIND_PERM) / "snap").exists())
