@@ -60,14 +60,31 @@ modern TUI in the terminal.
 
 ### From PyPI (recommended)
 
+NIX 0.4 is currently in beta. pip does not install pre-releases unless you ask
+for them, so **add `--pre`**:
+
 ```bash
-pip install cli-nix
+pip install --pre cli-nix
 nix
 ```
 
-Upgrade to the latest published version with `pip install -U cli-nix`.
-Prefer an isolated environment? `uv tool install cli-nix` installs the `nix`
-command in its own environment and leaves your system Python untouched.
+```bash
+# upgrade from any earlier install
+pip install --pre -U cli-nix
+```
+
+Without `--pre` you get 0.3.11, where the `run` and `destruct` commands are
+broken and the project index does not refresh after the first scan.
+
+Verify what you have:
+
+```bash
+nix --version        # expect: NIX 0.4.0b1
+```
+
+Prefer an isolated environment? `uv tool install --prerelease cli-nix`
+installs the `nix` command in its own environment and leaves your system Python
+untouched.
 
 ### From a git clone (any platform)
 
